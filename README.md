@@ -17,13 +17,13 @@ R Core Team (2021). R: A language and environment for statistical computing. R F
 
 # Contact Informaiton
 
-Aayush Khadka aayush.khadka@ucsf.edu
-Department of Family and Community Medicine, University of California, San Francisco
+Aayush Khadka
+aayush.khadka@ucsf.edu - Department of Family and Community Medicine, University of California, San Francisco
 
 
-Jilly Hebert jilly.hebert@ucsf.edu
-Department of Family and Community Medicine, University of California, San Francisco
+Jilly Hebert
+jilly.hebert@ucsf.edu - Department of Family and Community Medicine, University of California, San Francisco
 
 
-Anusha Vable anusha.vable@ucsf.edu
-Department of Family and Community Medicine, University of California, San Francisco
+Anusha Vable
+anusha.vable@ucsf.edu - Department of Family and Community Medicine, University of California, San Francisco
