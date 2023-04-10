@@ -6,17 +6,21 @@ Quantile regression is a powerful method of evaluating how an exposure affects t
 
 # Repository Content
 
-- `README.md`: This file with an explination of the workshop.
-- `R_QR`: An example R file implimenting quantile regression in R.
-- `STATA_QR`: An example Do file implimenting quantile regression in STATA.
+- `README.md`: This file with an explanation of the workshop.
+- `R_QR`: An example R file implementing quantile regression in R.
+- `STATA_QR`: An example Do file implementing quantile regression in STATA.
+
+Note that no datasets will be made available on this repository due to data usage restrictions. All data can be accessed through the Health and Retirement Study (HRS) public survey files. 
 
 
 # References
 
+Health and Retirement Study, (Tracker and RAND) public use dataset. Produced and distributed by the University of Michigan with funding from the National Institute on Aging (grant number NIA U01AG009740). Ann Arbor, MI, (2023).
+
 R Core Team (2021). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/
 
 
-# Contact Informaiton
+# Contact Information
 
 Aayush Khadka aayush.khadka@ucsf.edu  
 Department of Family and Community Medicine, University of California, San Francisco
