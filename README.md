@@ -7,14 +7,13 @@ Quantile regression is a powerful method of evaluating how an exposure affects t
 # Repository Content
 
 - `README.md`: This file with an explination of the workshop.
-
+- `R_QR`: An example R file implimenting quantile regression in R.
+- `STATA_QR`: An example Do file implimenting quantile regression in STATA.
 
 
 # References
 
 R Core Team (2021). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/
-
-Vable AM, Eng CW, Mayeda ER, Basu S, Marden JR, Hamad R, et al. Mother’s education and late-life disparities in memory and dementia risk among US military veterans and non-veterans. J Epidemiol Community Health. 2018 Dec;72(12):1162–7.
 
 
 # Contact Informaiton
