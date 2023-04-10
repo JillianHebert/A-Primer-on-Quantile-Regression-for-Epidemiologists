@@ -19,18 +19,19 @@
 	** Create OLS results sheet
 	putexcel set `saveloc'qr_results, modify sheet("OLS")
 	putexcel A1 = "quantile"	
-	putexcel B1 = "coef"
+	putexcel B1 = "coef" //Saves school year estimate
 	putexcel C1 = "lci"	
 	putexcel D1 = "uci"	
 	
 	
 	** Bootstrap 95% CI's
 	regress sbp c.schlyrs c.age c.age2 i.gender i.race c.rameduc c.rafeduc //
-	i.southern, vce(boostrap, reps(500))
+	i.southern i.year, vce(boostrap, reps(500))
 	
 	** Other modeling option
 	*regress sbp c.schlyrs c.age c.age2 i.female i.black i.latinx //
-	*c.rameduc c.rafeduc i.southern, vce(bootstrap, reps(500))
+	*c.rameduc c.rafeduc i.southern i.y08 i.y10 i.y12 i.y14 i.y16 i.y18, //
+	*vce(bootstrap, reps(500))
 	
 	
 	** Extracting results
@@ -52,7 +53,7 @@
 	** Create CQR results sheet
 	putexcel set `saveloc'qr_results.xlsx, modify sheet("CQR")
 	putexcel A1 = "quantile"			
-	putexcel B1 = "coef"
+	putexcel B1 = "coef" //Saves school year estimate
 	putexcel C1 = "lci"	
 	putexcel D1 = "uci"	
 	
@@ -63,11 +64,12 @@
 	forval i=0.01(0.01)0.99 {
 		
 		bsqreg sbp c.schlyrs c.age c.age2 i.gender i.race //
-		c.rameduc c.rafeduc i.southern, quantile(`i') reps(500)
+		c.rameduc c.rafeduc i.southern i.year, quantile(`i') reps(500)
 		
 		** Other modeling option
 		*bsqreg sbp c.schlyrs c.age c.age2 i.female i.black i.latinx //
-		*c.rameduc c.rafeduc i.southern, quantile(`i') reps(500)
+		*c.rameduc c.rafeduc i.southern i.y08 i.y10 i.y12 i.y14 i.y16 i.y18, //
+		*quantile(`i') reps(500)
 		
 		** Extracting results
 		matrix param = r(table)
@@ -93,7 +95,7 @@
 	** Create CQR results sheet
 	putexcel set `saveloc'qr_results.xlsx, modify sheet("UQR")
 	putexcel A1 = "quantile"			
-	putexcel B1 = "coef"
+	putexcel B1 = "coef" //Saves school year estimate
 	putexcel C1 = "lci"	
 	putexcel D1 = "uci"	
 	
@@ -103,12 +105,13 @@
 	**Bootstrap 95% CI's
 	forval i=1(1)99 {
 		
-		rifhdreg sbp c.schlyrs c.age c.age2 i.gender i.race //
-		c.rameduc c.rafeduc i.southern, rif(q(`i')) vce(bootstrap, reps(500))
+		rifhdreg sbp c.schlyrs c.age c.age2 i.gender i.race c.rameduc //
+		c.rafeduc i.southern i.year, rif(q(`i')) vce(bootstrap, reps(500))
 		
 		** Other modeling option
 		*rifhdreg sbp c.schlyrs c.age c.age2 i.female i.black i.latinx //
-		*c.rameduc c.rafeduc i.southern, rif(q(`i')) vce(bootstrap, reps(500))
+		*c.rameduc c.rafeduc i.southern i.y08 i.y10 i.y12 i.y14 i.y16 i.y18, //
+		*rif(q(`i')) vce(bootstrap, reps(500))
 		
 		** Extracting results
 		matrix param = r(table)
