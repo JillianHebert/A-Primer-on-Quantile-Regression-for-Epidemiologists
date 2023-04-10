@@ -61,7 +61,7 @@
 	local c = 2
 	
 	**Bootstrap 95% CIs
-	forval i=0.01(0.01)0.99 {
+	forval i=0.1(0.01)0.9 {
 		
 		bsqreg sbp c.schlyrs c.age c.age2 i.gender i.race //
 		c.rameduc c.rafeduc i.southern i.year, quantile(`i') reps(500)
@@ -103,7 +103,7 @@
 	local c = 2
 	
 	**Bootstrap 95% CI's
-	forval i=1(1)99 {
+	forval i=10(1)90 {
 		
 		rifhdreg sbp c.schlyrs c.age c.age2 i.gender i.race c.rameduc //
 		c.rafeduc i.southern i.year, rif(q(`i')) vce(bootstrap, reps(500))
