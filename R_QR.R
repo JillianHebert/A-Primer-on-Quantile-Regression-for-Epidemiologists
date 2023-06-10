@@ -96,7 +96,7 @@ uqr_func <- function(data){
     i <- round(i, 2)
     
     data$rif_sbp <- rif(data$sbp, weights = NULL, method = "quantile",
-                        quantile = 0.1)
+                        quantile = i)
     uqr <- lm(rif_sbp ~ schlyrs + age + age2 + female + black + latinx +
                 southern + mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18, 
               data = data)
