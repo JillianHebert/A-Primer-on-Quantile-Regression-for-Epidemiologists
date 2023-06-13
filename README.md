@@ -10,7 +10,7 @@ Quantile regression is a powerful method of evaluating how an exposure affects t
 - `R_QR.R`: An example R file implementing quantile regression in R.
 - `STATA_QR.do`: An example Do file implementing quantile regression in STATA.
 - `Presentation`: A PowerPoint presentation of the 2023 SER workshop.
-- `Handout.Rmd`: A R markdown file with example code and explanation; to accompany the workshop presentation.
+- `Handout.Rmd`: A R markdown file with example code and explanation; to accompany the workshop presentation (please allow 5-10 minutes to compile).
 - `Handout.PDF`: A PDF version of the R markdown file when fully compiled.
 
 - `Cited Papers`: A folder containing PDF versions of cited papers.
