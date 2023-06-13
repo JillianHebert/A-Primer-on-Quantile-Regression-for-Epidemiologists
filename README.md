@@ -36,3 +36,6 @@ Department of Family and Community Medicine, University of California, San Franc
 Health and Retirement Study, (Tracker and RAND) public use dataset. Produced and distributed by the University of Michigan with funding from the National Institute on Aging (grant number NIA U01AG009740). Ann Arbor, MI, (2023).
 
 R Core Team (2021). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/
+
+StataCorp. 2021. Stata Statistical Software: Release 17. College Station, TX: StataCorp LLC.
+
