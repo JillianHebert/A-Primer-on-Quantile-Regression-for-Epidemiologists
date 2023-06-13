@@ -1,0 +1,1587 @@
+---
+title: <font size = "6" color = "F2494C">A Primer on Quantile Regression for Epidemiologists</font>
+subtitle: <font size = "4">SER 2023 Workshop</font>
+author: <font size = "3">Aayush Khadka, Jilly Hebert, and Anusha Vable</font>
+output:
+  pdf_document: default
+  html_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include = F}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# <font size = "6.5" color = "F2494C">Introduction</font>
+
+Welcome to <font size = "3" color = "FF9300">A Primer on Quantile Regression for Epidemiologists!</font> We are excited to have you here with us today! This document will serve as a companion to the slide deck which forms the basis of our discussion in today's workshop. 
+
+## <font size = "5" color = "468C8A">Workshop background</font>
+Our workshop builds off of a paper we have written as an introduction to quantile regression methods for epidemiologists. This paper is entitled "Quantile regressions as a tool to evaluate how an exposure shifts and reshapes the outcome distribution: A primer for epidemiologists" and is available on medRxiv at this [link](https://www.medrxiv.org/content/10.1101/2023.05.02.23289415v1). Do read it if you'd like and please do provide us with feedback if you have any. The paper was supported by a grant from the National Institute on Aging (R01 AG069092, PI Vable) but the paper's content is solely the responsibility of the authors and does not  represent the official views of the National Institutes on Aging.
+
+## <font size = "5" color = "468C8A">Overall learning aims</font>
+The learning aims of this workshop can be grouped into two categories: theory and practice. In terms of theory, our aim is to introduce you to quantile regression concepts by contrasting quantile regression with mean regression and, additionally, contrasting estimators targeted at quantiles of the conditional versus unconditional outcome distribution. In terms of practice, our goal is to provide you with code to conduct quantile regression analyses, to run various post-estimation tests, to present quantile regression coefficients, and to visualize how quantile regression results can be used to demonstrate the distributional effects of an exposure.
+
+## <font size = "5" color = "468C8A">Practical example</font>
+The quantile regression code in this workshop will be presented in the context of an analysis investigating the relationship between educational attainment and later-life systolic blood pressure (SBP). This is a question that occupies a lot of our time in VabLab because education has been shown to have a strong, inverse relationship with average SBP; however, since there may be a non-linear relationship between SBP and the risk of coronary heart disease and stroke, it is imperative that we understand education's potential role in reshaping the SBP distribution. 
+
+Our data for the practical example comes from the US Health and Retirement Study, which is a nationally representative, multi-cohort, biennially conducted longitudinal study of non-institutionalized US adults who are 50 years or older. Our analytic sample includes US born HRS participants who were first interviewed in 1998 or later, and had no missing covariate information (N = 8,875). Since blood pressure started being measured in the HRS in 2006, 
+our study period ranged from 2006 to 2018.
+
+We use self-reported total years of schooling as our exposure variable and first recorded SBP as our outcome variable. Total years of schooling takes on integer values between 5 and 17 years, with 5 indicating that the respondent had 5 or fewer years of schooling and 17 indicating that the respondent had 17 or more years of schooling. We do not use repeated measures of SBP in our data to keep the exposition of quantile regression ideas clear and uncomplicated. In our analysis, we will also include covariates such as age (linear and quadratic terms), sex (female and male persons), race (Black, Latinx, White), whether the respondent was born in the southern US, parental education as a marker of childhood socioeconomic status, and the year in which SBP was measured.
+
+```{r message = F, warning = F}
+
+library(readr)
+library(tidyverse)
+
+#Load dataset
+data <- read_rds("QRWorkshop.rds")
+
+#Format categorical variables
+data$gender <- factor(data$gender)
+data$race <- factor(data$race)
+data$year <- factor(data$year)
+
+#Centering school years at 12 years of schooling
+data$schlyrs <- data$schlyrs - 12
+
+#View dataset
+summary(data)
+
+```
+
+
+The specifics of the variables included in our dataset are provided below:
+
+-   ID: Unique identifier\
+-   Age: Age of participant at the time of SBP measurement (linear/quadratic)\
+-   Gender: Gender of participant\
+<font size = "2.5"> - 1 = Female\
+     - 2 = Male
+-   Race: Race of participant\
+    <font size = "2.5"> - 1 = non-Hispanic White\
+     - 2 = non-Hispanic Black\
+     - 3 = Hispanic/Latinx\
+-   Southern: Birthplace of participant\
+    <font size = "2.5"> - 0 = Not born in the Southern US\
+     - 1 = Born in the Southern US</font>\
+-   Schlyrs: Self-reported total years of education (centered at 12 years to help aid the interpretation of the intercept later)\
+<font size = "2.5"> - 5-17 years\
+-   Mom_ed: Mother's education\
+<font size = "2.5"> - 5-17 years\
+-   Dad_ed: Father's education\
+<font size = "2.5"> - 5-17 years\
+-   Year: Year of SBP measurement\
+<font size = "2.5"> - 2006-2018\
+-   SBP: Systolic blood pressure (mmHg)\
+<font size = "2.5"> - 73-233 mmHg\
+
+# <font size = "5" color = "468C8A">Teaching resources</font>
+All materials can be found on our 
+[repository](https://github.com/JillianHebert/A-Primer-on-Quantile-Regression-for-Epidemiologists). Please don't hesitate to [contact any of us](#contact-information) with questions!
+
+## <font size = "5" color = "468C8A">Abbreviations</font>
+When we first entered the public health/epidemiology world, we were shocked by how many abbreviations there were. And now, we've reached the stage of our careers where we too are using a plethora of abbreviations in our daily lives. Unfortunately, this workshop too has fallen pray to our love for abbreviations. The following table lists all the abbreviations that you will see in this workshop and their full form. Please feel free to refer back to it whenever you want.
+
+| \textbf{Abbreviation}  | \textbf{Full form} | 
+------------------- | ------------------- | ------------------- | ------------------- |
+\textbf{Abbreviation}  | \textbf{Full form} | 
+|||||
+CDF | Cumulative Distribution Function | 
+|||||
+CEF | Conditional Expectation Function | 
+|||||
+CQF | Conditional Quantile Function | 
+|||||
+CQR | Conditional Quantile Regression | 
+|||||
+DGP | Data Generating Process | 
+|||||
+IF | Influence Function | 
+|||||
+OLS | Ordinary Least Squares | 
+|||||
+RIF | Recentered Influence Function | 
+|||||
+SBP | Systolic Blood Pressure | 
+|||||
+UQR | Unconditional Quantile Regression | 
+
+# <font size = "6.5" color = "F2494C">A matter of life and distributions</font>
+In his seminal work "Sick Individuals and Sick Populations," Geoffrey Rose wrote about the need to reduce the incidence of disease through population-level interventions that shift the distribution of risk factors [(12)](#references). Rose contrasted this approach with the more standard approach of prevention which focused on targeting those at high risk of disease and treating them, often with some form of medication. Additionally, Rose believed that quantifying the impact of population-level interventions on the distribution of risk factors could be done by quantifying how the intervention affects the mean of the risk factor distribution.
+
+Rose's ideas have influenced generations of epidemiologists, including us. Several epidemiologists have expanded his arguments to show that focusing simply on how the mean of the risk factor distribution changes may not give us full insight into how an intervention is affecting the entire distribution. In fact, these scholars have argued that we must explicitly test how a population-level intervention is affecting the tails of the risk factor distribution, especially as some of society's most vulnerable people are located in the tails.
+
+Blood pressure is a striking example to illustrate the idea of the need to focus on the tails of a distribution. Many studies have indicated that blood pressure may have a non-linear relationship with the risk of other poor health outcomes such as coronary heart disease or stroke. This means that a 20 unit decrease in blood pressure at high levels (say, from 180 mmHg to 160 mmHg) reduces the risk of poor health outcomes significantly more than a 20 unit decrease at low levels (say, from 140 mmHg to 120 mmHg). As such, a population-level intervention that is able to reduce blood pressure more at higher levels relative to lower levels may have a greater potential to improve population health than, say, an intervention which affects the blood pressure distribution uniformly.
+
+Empirical epidemiology has, to date, largely focused on modeling how interventions affect the mean of an outcome. There may be several reasons for this, which we outline in our [paper](https://www.medrxiv.org/content/10.1101/2023.05.02.23289415v1) on medRxiv. Unfortunately, focusing only on how an intervention affects the mean may not provide us with a good idea of how the same intervention is affecting the entire outcome distribution. Consider the following figure: we see that mean models are capable of capturing distributional effects only when an intervention uniformly affects the outcome distribution ("location shift"); however, when an intervention affects the variance of the distribution ("scale shift") or both a location and scale shift in the outcome distribution, then mean models cannot capture distributional effects of an intervention.
+
+# <font size = "3" color = "FF9300">Location and scale shifts</font>
+```{r message = F, warning = F}
+
+library(tidyverse)
+library(patchwork) #Printing ggplots together
+
+#Location shift
+cont <- rnorm(100, mean = 0, sd = 1)
+loc_t <- cont + 3
+
+ls <- data.frame("Outcome" = c(cont, loc_t),
+                 "Group" = factor(c(rep("Control", length(cont)),
+                                    rep("Treatment", length(loc_t)))))
+
+location_shift <- ggplot(aes(Outcome, color = Group, linetype = Group), 
+                         data = ls) +
+  geom_density() +
+  xlim(-10, 10) +
+  ylab("Density") +
+  scale_color_manual(values = c("#F2494C", "#468C8A")) + 
+  theme_classic() +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom")
+
+
+#Scale shift
+scl_t <- rnorm(100, mean = 0, sd = 3)
+
+ss <- data.frame("Outcome" = c(cont, scl_t),
+                 "Group" = factor(c(rep("Control", length(cont)),
+                                    rep("Treatment", length(scl_t)))))
+
+scale_shift <- ggplot(aes(Outcome, color = Group, linetype = Group),
+                      data = ss) +
+  geom_density() +
+  xlim(-10, 10) +
+  ylab("Density") +
+  scale_color_manual(values = c("#F2494C", "#468C8A")) + 
+  theme_classic() +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom")
+
+
+#Location and Scale shift
+ls_t <- scl_t + 3
+
+lss <- data.frame("Outcome" = c(cont, ls_t),
+                  "Group" = factor(c(rep("Control", length(cont)),
+                                     rep("Treatment", length(ls_t)))))
+
+loc_scale_shift <- ggplot(aes(Outcome, color = Group, linetype = Group), 
+                          data = lss) +
+  geom_density() +
+  xlim(-10, 10) +
+  ylab("Density") +
+  scale_color_manual(values = c("#F2494C", "#468C8A")) + 
+  theme_classic() +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom")
+
+#Comparing distributional changes
+(location_shift | scale_shift) /
+(loc_scale_shift + plot_spacer())
+
+```
+
+We argue that quantile regressions can offer us a way of understanding how an exposure affects the entire outcome distribution. In what follows we will demonstrate how quantile regressions allow us to investigate distributional effects. But first, we'll set the stage for quantile regression by taking a brief foray into the world of means, quantiles, and mean models, in particular, linear regression.
+
+# <font size = "6.5" color = "F2494C">A refresher on means and quantiles</font>
+
+# <font size = "5" color = "468C8A">Means</font>
+When we're talking about means, we're focusing on the arithmetic mean. We are probably all familiar with the idea of a mean or average of a random variable. Essentially, the mean represents the "center of mass" of a variable's distribution. 
+
+We're probably also all aware that we can estimate the mean of a random variable by taking a probability weighted sum of all elements of a random variable (e.g., in the case of a continuous variable, we would integrate the product of each element of the variable and the probability of its occurrence). Or, more simply, we could add up all the elements of a variable and divide the sum by the total number of elements (something that's hard to do when we have a truly continuous variable with many elements).
+
+However, there is also another approach to finding the mean of a random variable. This approach relies on solving a minimization problem. Specifically, we can find the mean of a random variable $Y$ by minimizing: 
+
+$$
+min_a \sum_{i=1}^{N}(y_i - a)^2.
+$$
+
+Here, $a$ is any value from the range of $Y$. What this minimization problem says is that the value of $Y$, denoted here by $a$, which minimizes the sum of the squared difference between itself and all other values of $Y$ is the mean of $Y$. In other words, the mean minimizes the sum of squared differences. You can see this process illustrated in an animated plot in our presentation slide deck.
+
+What's interesting is that we can extend this optimization framework to finding means of the conditional distribution of $Y$. For instance, let $X$ be the conditioning variable. Then, we can find the mean of $Y|X$ ($Y$ conditional on $X$) by minimizing:
+
+$$
+min_\beta \sum_{i=1}^{N} (y_i - g(x_i, \beta))^2.
+$$
+Here, $g(x_i, \beta)$ is an arbitrary function of the conditioning variable. This minimization is something that you may have already seen before, for in a very specific context. For instance, let's assume that $g(x_i, \beta)$ can be written as a linear in parameters equation: $\beta_0 + \beta_1 x_i$. In this case, we can write the minimization problem as:
+
+$$
+min_{\beta_0, \beta_1} \sum_{i=1}^{N} (y_i - \beta_0 - \beta_1x_i)^2.
+$$
+Notice, that this is the famous "minimizing the sum of squared errors" for a least squares regression! In fact, the whole reason for showing you all the optimization approach to finding means (and later, quantiles) is that this optimization serves as the basis for linear regression (and later, quantile regression)!
+
+One final point about means: there's a very nice link between the means of the conditional distribution and the mean of the unconditional distribution that's captured by the Law of Iterated Expectations. The Law of Iterate Expectation sounds fancy, but the underlying idea is something that we might already be familiar with. Basically, the Law of Iterated Expectation says that the unconditional mean of a variable ($E[Y]$) can be found by taking a probability weighted sum of all the conditional means ($E[Y|X]$) (i.e., $E[Y] = E_x[E[Y|X]]$). Let's illustrate this in the context of SBP in our data where the conditioning variable is age group (<60 years, 60-69 years, 70-79 years, and 80+ years). 
+
+# <font size = "3" color = "FF9300">Unconditional and conditional means</font>
+```{r message = F, warning = F}
+
+# Unconditional mean
+mean(data$sbp)
+
+
+# Conditional means
+data <- data %>%
+  mutate(age_group = case_when(age < 60 ~ "<60",
+                                      between(age, 60, 69) ~ "60-69",
+                                      between(age, 70, 79) ~ "70-79",
+                                      age >= 80 ~ "80+"))
+data %>%
+  group_by(age_group) %>%
+  summarise(mean_sbp = mean(sbp),
+            n = n(),
+            product = mean_sbp*n)
+
+
+# Law of Iterated expectation in action. Here we're using information from the table above to multiply each conditional mean by the probability of that age group occurring in the data. The probability is calculated inside the parentheses.
+125.3223*(5813/8875) + 130.4148*(1925/8875) + 134.0595*(613/8875) + 135.4838*(524/8875)
+
+```
+
+We will see the Law of Iterated Expectation show its full glory when we're talking about unconditional quantile regressions later during this workshop. Additionally, it is the Law of Iterated Expectations that also allows us to interpret results from a plain vanilla linear regression model as the effect of an exposure on the unconditional mean of the outcome.
+
+# <font size = "5" color = "468C8A">Quantiles</font>
+
+When we say quantiles, think "percentiles". We'll continue to use the term quantiles in this workshop since we're talking about quantile regressions, although sometimes we've heard quantile regressions be called "percentile regressions" as well. We would advise you to stick with the term quantile regression as it is more standard and avoids confusion.
+
+For a given random variable $Y$, the $\tau^{th}$ quantile is that value of $Y$ such that $\tau$% of the values lie below it. For example, the $50^{th}$ quantile of $Y$ is the value of $Y$ such that 50% of observations lie below it. Similarly, the $25^{th}$ and $75^{th}$ quantiles of $Y$ are those values of $Y$ such that 25% and 75% of observations lie below them. The $50^{th}$ quantile is better known by the term "median". Sometimes, the $50^{th}$, $25^{th}$, and $75^{th}$ quantiles may also be called the 0.5, 0.25, and 0.75 quantiles. Finally, please note that quantiles aren't restricted only to the $50^{th}$, $25^{th}$, or $75^{th}$ quantiles. $\tau$ could take any value between 0 and 1, so you can define any quantile between 0 and 1: 0.1 quantile, 0.18 quantile, 0.36 quantile, 0.45 quantile, 0.9 quantile...the list is actually infinite!
+
+# <font size = "3" color = "FF9300">Obtaining quantile values in R</font>
+
+It's easy to find quantiles of a random variable in R. Let's take a look at how we'd find quantiles of the unconditional SBP distribution:
+
+```{r message = F, warning = F}
+
+as.numeric(quantile(data$sbp, probs = c(0.1, 0.25, 0.5, 0.75, 0.9)))
+
+q10 <- as.numeric(quantile(data$sbp, probs = 0.10)) 
+q25 <- as.numeric(quantile(data$sbp, probs = 0.25))
+q50 <- as.numeric(quantile(data$sbp, probs = 0.50))
+q75 <- as.numeric(quantile(data$sbp, probs = 0.75))
+q90 <- as.numeric(quantile(data$sbp, probs = 0.90)) 
+
+```
+
+# <font size = "3" color = "FF9300">Finding quantiles through optimization</font>
+
+Quantiles have an interesting parallel to means, in the sense that we can estimate quantiles by solving an optimization problem too. For a random variable $Y$, we can find its $\tau^{th}$ quantile by minimizing:
+
+$$
+min_a \sum_{i=1}^{N} \rho_\tau(y_i - a).
+$$
+
+This minimization looks similar to the minimization we did for finding means because both involve minimizing a sum. In both cases, $a$ refers to a value of $Y$ from the range of $Y$. However, what's inside the sum is different: in the case of means, we were minimizing the sum of squared deviations from $a$ while here we're minimizing the deviation of all values of $Y$ from $a$ but these deviations are plugged into the $\rho_\tau$ function. 
+
+It's worth interrogating the $\rho_\tau$ function a bit more since it shows up again in conditional quantile regressions. The function $\rho_\tau$ is defined as follows:
+
+$$
+\rho_\tau(u) = u(\tau - I(u<0))
+$$
+
+where $\tau$ refers to the quantile of interest, $u$ is the argument of the function, and $I(u<0)$ is the indicator function which takes the value 1 when $u<0$ and 0 otherwise. We use $u$ to make the expression of $\rho_\tau$ convenient; however, you can replace $u$ with $y_i - a$ to express $\rho_\tau$ in a way that conforms to the minimization we saw above:
+
+$$
+\rho_\tau(y_i - a) = (y_i - a)  (\tau - I(y_i - a < 0)).
+$$
+The $\rho_\tau$ function is also known as the "check function" because of how it sketches out a check mark when we plot its points. In our presentation, we show the check mark plot in the case of our data with $a = 100$ and $a = 120$ and SBP being the random variable of interest.
+
+Just as with means, we can find quantiles of the conditional distribution of a random variable by solving an optimization problem as well. 
+
+For instance, let $X$ be the conditioning variable for a random variable $Y$. Then, we can find the $\tau^{th}$ quantile of $Y|X$ ($Y$ conditional on $X$) by minimizing:
+
+$$
+min_\beta \sum_{i=1}^{N} \rho_\tau(y_i - g(x_i, \beta)).
+$$
+Here, $g(x_i, \beta)$ is an arbitrary function of the conditioning variable. We saw how in the case of means, the minimization to find the conditional means serves as the foundation for linear regression. The same is true for conditional quantile regressions! For instance, let's assume that $g(x_i, \beta)$ can be written as a linear in parameters equation: $\beta_0 + \beta_1 x_i$. In this case, we can write the minimization problem as:
+
+$$
+min_{\beta_0, \beta_1} \sum_{i=1}^{N} \rho_\tau(y_i - \beta_0 - \beta_1x_i).
+$$
+This is exactly the optimization function we need to solve to estimate parameters of the conditional quantile regression! More on this later.
+
+# <font size = "3" color = "FF9300">Going from conditional to unconditional quantiles</font>
+
+The figure below shows the 10<sup>th</sup>, 25<sup>th</sup>, 50<sup>th</sup>, 75<sup>th</sup>, and 90<sup>th</sup> quantiles of the unconditional SBP distribution (panel a) and SBP distribution among 80+ year olds in our data (panel b). Notice how the values of the quantiles between the unconditional and conditional distributions don't line up particularly well. This is to be expected, of course, but this poses a challenge when it comes to working back up from conditional quantiles to unconditional quantiles.
+
+```{r message = F, warning = F}
+
+#Unconditional density plot
+unconditional_den <- ggplot(data, aes(x = sbp)) + 
+  geom_density(aes(y = after_stat(density))) +
+  xlab("Systolic Blood Pressure (mmHg)") +
+  ylab("Density")  +
+  labs(title = "a) Unconditional density of systolic blood pressure") + 
+  theme_classic() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 10)) + 
+  geom_vline(aes(xintercept = q10), color = "#F2494C", linewidth = 1) +
+  geom_vline(aes(xintercept = q25), color = "#FF9300", linewidth = 1) +
+  geom_vline(aes(xintercept = q50), color = "#468C8A", linewidth = 1) +
+  geom_vline(aes(xintercept = q75), color = "blue", linewidth = 1) +
+  geom_vline(aes(xintercept = q90), color = "purple", linewidth = 1) +
+  scale_x_continuous(breaks = seq(60, 240, by = 20))
+
+
+#Conditional density plot (for 80+ group)
+data_8 <- data %>% 
+  dplyr::filter(age_group == "80+")
+
+q10_8 <- as.numeric(quantile(data_8$sbp, probs = 0.10)) 
+q25_8 <- as.numeric(quantile(data_8$sbp, probs = 0.25))
+q50_8 <- as.numeric(quantile(data_8$sbp, probs = 0.50))
+q75_8 <- as.numeric(quantile(data_8$sbp, probs = 0.75))
+q90_8 <- as.numeric(quantile(data_8$sbp, probs = 0.90)) 
+
+
+conditional_den <- ggplot(data_8, aes(x = sbp)) + 
+  geom_density(aes(y = after_stat(density))) +
+  xlab("Systolic Blood Pressure (mmHg)") +
+  ylab("Density")  +
+  labs(title = "b) Conditional density of systolic blood pressure (80+)") + 
+  theme_classic() +
+  theme(strip.background = element_blank(),
+        text = element_text(size = 10)) + 
+  geom_vline(aes(xintercept = q10_8), color = "#F2494C", linewidth = 1) +
+  geom_vline(aes(xintercept = q25_8), color = "#FF9300", linewidth = 1) +
+  geom_vline(aes(xintercept = q50_8), color = "#468C8A", linewidth = 1) +
+  geom_vline(aes(xintercept = q75_8), color = "blue", linewidth = 1) +
+  geom_vline(aes(xintercept = q90_8), color = "purple", linewidth = 1) +
+  scale_x_continuous(breaks = seq(60, 240, by = 20))
+
+
+unconditional_den / conditional_den
+
+```
+
+With means, we could rely on the Law of Iterated Expectation to help us back out the unconditional mean from the conditional means. Unlike means, there is no Law of Iterated Quantiles *yet*, which means that we usually cannot use information about quantiles of the conditional distribution to learn about the same quantiles of the unconditional distribution. This in turn means that we need to be careful about choosing which quantile is of substantive interest before conducting a quantile regression analysis. More on this at the end! 
+
+# <font size = "6.5" color = "F2494C">Linear regression</font>
+
+Let's say our objective is to quantify the association of educational attainment with systolic blood pressure (SBP). A potential solution could be to fit an unadjusted linear regression model by plotting a linear line through the data. This is equivalent to fitting an unadjusted regression line (exemplified using ordinary least squares). 
+
+# <font size = "3" color = "FF9300">Unadjusted ordinary least squares model</font>
+
+```{r message = F, warning = F}
+
+ggplot(aes(x = schlyrs, y = sbp), data = data) +
+  geom_point() +
+  scale_x_continuous(limits = c(-7, 5),
+                     breaks = seq(-7, 5, by = 1)) +
+  xlab("School Years (centered at 12 years)") +
+  ylab("Systolic Blood Pressure (mmHg)") + 
+  geom_smooth(method = "lm", formula = y ~ x, color = "#FF9300") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+
+ols_un <- lm(sbp ~ schlyrs, data = data)
+summary(ols_un)$coefficients["schlyrs", ]
+
+```
+
+But what exactly is linear regression modeling? The linear regression line we fit in our sample is a model of the population regression line, which itself is a model of the conditional expectation function (CEF). The CEF is a function which describes how the conditional expectation of one variable changes as we change values of the conditioning variable. The CEF is usually written as $E[Y|X]$ or in the context of our example, $E[SPB|schlyrs]$. When the CEF is linear (i.e., when the conditional means of a variable can be connected by a straight line) then the population regression line and the CEF coincide. When the CEF is non-linear, the population regression line provides the best linear approximation to the non-linear CEF, where "best" is defined in terms of the line that minimizes the expected mean squared error. 
+
+# <font size = "3" color = "FF9300">Conditional expectation function (CEF)</font>
+
+Here we will illustrate finding the conditional mean at every level of education to demonstrate the CEF graphically.
+
+```{r message = F, warning = F}
+
+#Creating a dataset of conditional means
+df_sbp_means <- data %>%
+  group_by(schlyrs) %>%
+  summarise(mean_sbp = mean(sbp, na.rm = TRUE), .groups = "keep")
+
+#CEF plot
+cef <- ggplot(data = df_sbp_means, aes(x = schlyrs, y = mean_sbp)) +
+  geom_point() +
+  geom_line() +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold")) +
+  scale_x_continuous(limits = c(-7, 5),
+                     breaks = seq(-7, 5, by = 1)) +
+  scale_y_continuous(limits = c(60, 240),
+                     breaks = seq(60, 240, by = 40)) +
+  xlab("Total years of schooling (centered at 12)") +
+  ylab("Systolic Blood Pressure (mmHg)") 
+
+cef
+
+
+#Or the fun animated ggplots!
+# library(gganimate)
+# library(gifski)
+# library(magick)
+# 
+# #Estimating the conditional means of SBP by level of schooling
+# #Reducing data
+# df_linreg_basic <- data %>%
+#   select("schlyrs", "sbp", "gender") %>%
+#   group_by(schlyrs) %>%
+#   mutate(mean_sbp = mean(sbp, na.rm = TRUE)) %>%
+#   ungroup()
+# 
+# 
+# 
+# #Creating a dataset for plotting
+# df_linreg_basic_animate <- rbind(
+#   #Step 1: Raw data only
+#   df_linreg_basic %>% mutate(mean_sbp = NA, time = '1. Full data'),
+#   #Step 2: SBP means only
+#   df_linreg_basic %>% mutate(sbp = mean_sbp,
+#                 mean_sbp = NA, time = '2. Conditional means')
+# )
+# 
+# #GIF1: Animating the conditional expectation
+# linreg_scatter <- ggplot(data = df_linreg_basic_animate,
+#                          aes(x = schlyrs, y = sbp)) +
+# 
+#   #Regular plot
+#   geom_point() +
+#   theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         axis.text = element_text(size = 12),
+#         axis.title = element_text(size = 13.5, face = "bold"),
+#         plot.title = element_text(size = 16, face = "bold")) +
+#   scale_x_continuous(limits = c(-7, 5),
+#                      breaks = seq(-7, 5, by = 1)) +
+#   xlab("Total years of schooling (centered at 12)") +
+#   ylab("Systolic Blood Pressure (mmHg)") +
+# 
+#   #Animation
+#   transition_states(time, wrap = FALSE) +
+#   ease_aes('linear') +
+#   exit_fade() +
+#   enter_fade()
+# 
+# animate(linreg_scatter,
+#         width = 10, height = 6.67, unit = "in",
+#         res = 300,
+#         renderer = gifski_renderer(loop = FALSE),
+#         fps = 20)
+
+```
+
+> The conditional expectation function (CEF) tells us how the conditional mean of the outcome changes as we change values of the conditioning variable
+
+The population regression line is represented by the equation $\beta_0 + \beta_1x_i$, or $\beta_0 + \beta_1schlyrs_i$ in the context of our example. The linear regression we fit in our samples represents our attempt to estimate parameters of this population regression line and hence is written as $\hat{\beta_0} + \hat{\beta_1}x_i$, where the $\hat{}$ ("hat") represents an estimated quantity. In the context of our example, the sample regression line is represented by the equation $\hat{\beta_0} + \hat{\beta_1}schlyrs_i$. 
+
+# <font size = "3" color = "FF9300">Population regression line approximates the conditional expectation function</font>
+
+If we imagine that are sample was actually capturing the entire population, this would be an illustration of the population regression line (represented in tangerine). This is a linear approximation of the CEF (represented in black).
+
+```{r message = F, warning = F}
+
+#Estimating the conditional means of SBP by level of schooling
+df_linreg_basic <- data %>%
+  select("schlyrs", "sbp", "gender") %>%
+  group_by(schlyrs) %>%
+  mutate(mean_sbp = mean(sbp, na.rm = TRUE)) %>%
+  ungroup()
+
+#CEF plot with regression line
+cef_reg <- ggplot(data = df_sbp_means, aes(x = schlyrs, y = mean_sbp)) +
+  geom_point() +
+  geom_line() +
+  geom_smooth(data = df_linreg_basic, aes(x = schlyrs, y = sbp), method = "lm", formula = y ~ x, color = "#FF9300", se = FALSE) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold")) +
+  scale_x_continuous(limits = c(-7, 5),
+                     breaks = seq(-7, 5, by = 1)) +
+  scale_y_continuous(limits = c(60, 240),
+                     breaks = seq(60, 240, by = 40)) +
+  xlab("Total years of schooling (centered at 12)") +
+  ylab("Systolic Blood Pressure (mmHg)") 
+
+cef_reg
+
+```
+
+> Since it is a model of the conditional expectation function, linear regression provides us with an estimate for how the mean of the outcome changes as we change the exposure by one unit
+
+In the context of our example, linear regression answers the question: By how much does mean systolic blood pressure change for each additional year of schooling? 
+
+# <font size = "5" color = "468C8A">Estimating and interpreting coefficients</font>
+
+Imagine that our model of the world (i.e., the data generating process) can be represented with the equation $y_i = \beta_0 + \beta_1x_i + \epsilon_i$, where $\epsilon$ represents the error term. This equation can be rewritten to solve for $\epsilon$, where $\epsilon_i = y_i - \beta_0 - \beta_1x_i$. This equation might look familiar from the means and quantiles section. The population regression line is $E[Y|X] = \beta_0 + \beta_1x_i$, where we assume that $E[\epsilon|X] = E[\epsilon] = 0$ (a.k.a, the zero conditional mean assumption) and $Var(\epsilon) = \sigma^2$ (a.k.a, the constant variance assumption or homoskedasticity).  
+
+We can calculate the coefficients of the population regression line by minimizing the expectation of the squared error term, which we can think of as minimizing the sum of squared errors: 
+
+$$(\beta_0,\beta_1) = min\sum_{i}{\epsilon_i^2} = min_{\beta_0,\beta_1}\sum_{i}(y_i - \beta_0 - \beta_1x_i)^2$$
+
+As mentioned earlier, linear regression in our sample is trying to estimate parameters of this population regression line. There are several ways to estimate coefficients of our sample linear regression (e.g., ordinary least squares, moment estimators, or maximum likelihood estimation); we will focus on Ordinary Least Squares (OLS) because it's easy, familiar, and will come in handy later when we're talking about unconditional quantile regressions. 
+
+OLS mimics the process of finding the population regression coefficients by minimizing the estimate of the sum of squared errors in the sample:
+
+$$(\hat{\beta_0},\hat{\beta_1}) = min\sum_{i}{\hat{\epsilon_i}^2} = min_{\hat{\beta_0},\hat{\beta_1}}\sum_{i}(y_i - \hat{\beta_0} - \hat{\beta_1}x_i)^2$$
+
+This minimization has the analytic solution: 
+
+$$\hat{\beta_0} = \bar{y} - \hat{\beta_1}\bar{x}$$
+
+$$\hat{\beta_1} = \frac{\sum_{i=1}^{N}(x_i-\bar{x})(y_i-\bar{y})}{\sum_{i=1}^{N}(x_i-\bar{x})^2}$$
+
+$\hat{\beta_0}$ is the estimated average value of $Y$ when $x_i = 0$ (i.e., the mean of the distribution $Y|x_i = 0$). $\hat{\beta_1}$ is the estimated change in the conditional mean of $Y$ for a one unit change in $X$. 
+
+If we have a multivariable linear regression model, OLS coefficients can be written in other ways too: for example, in matrix notation, we can write the linear regression model as $\widehat{E[Y|X]} = X'\hat{\beta}$ and the solution as 
+$$min_{\beta}\sum_{i=1}^{N}(Y - X'\hat{\beta})^2 \rightarrow \hat{\beta} = (X'X)^{-1}(X'Y)$$
+
+Here $\hat{\beta}$ is the vector of coefficients, $X$ is the design matrix which includes all independent variables in the model as well as a column of 1's for the intercept, $X'$ is the transpose of the matrix $X$ (i.e., rows and columns switched), and $Y$ is the vector of the outcome.
+
+The matrix notation is particularly useful when we have more than one covariate in our regression model. What's nice about linear regression is that, regardless of how many covariates you include, the interpretation of the coefficient remains basically the same. For example, suppose we were trying to estimate parameters of the model: $E[Y|X] = \beta_0 + \beta_1x_{1,i} + \beta_2x_{2,i}$. We could interpret our estimate for $\beta_1$ (i.e., $\hat{\beta_1}$) as the estimated change in the mean value of $Y$ due to a one unit change in $X_1$, holding $X_2$ constant. We fit a multivariable linear regression model below and provide an interpretation on the "schlyrs" (i.e., school years) coefficient:
+
+```{r message = F, warning = F}
+
+#Fit adjusted ols model
+ols <- lm(sbp ~ schlyrs + age + age2 + gender + race + southern + mom_ed +
+            dad_ed + year, data = data)
+
+summary(ols)$coefficients["schlyrs", ]
+
+```
+
+We can interpret the coefficient on "schlyrs" as: a one year increase in years of schooling is associated with a 0.79 mmHg decrease in average SBP, holding all other covariates in the model constant.
+
+# <font size = "5" color = "468C8A">Estimating standard errors</font>
+
+The estimated coefficients in the linear regression model are random variables themselves and have a distribution, which we call the "sampling distribution". The coefficients are random variables in the sense that they have been fit on a sample, and fitting the sample regression on different samples from the same population would produce (potentially) different values of the coefficients. Under some assumptions, the central limit theorem tells us that the sampling distribution is normally distributed with the mean equal to the population coefficient value. We use standard errors to understand how close our estimate is to the mean (i.e., standard deviation of the sampling distribution).
+
+When the error term is homoscedastic, the standard error is calculated using $se(\hat{\beta})=\sigma^2(X'X)^{-1}$. However, this assumption is almost always violated in practice. One way the assumption is violated is that the error variance is a function of the covariates of the model, a situation known as heteroskedasticity. In this situation, the errors are no longer assumed to be identically distributed (but still assumed to be independent). Heteroskedastic robust standard errors can be estimated in our sample linear regression coefficient using $se(\hat{\beta})=(X'X)^{-1}X' \Omega X(X'X)^{-1}$ where $\Omega$ is the variance-covariance matrix
+
+$$
+\Omega = 
+\left[\begin{array}{cccc} 
+\sigma_1^2 & 0 & ...  & 0 \\
+0 & \sigma_2^2 & ...  & 0 \\
+\vdots & 0 & \ddots  & \vdots \\
+0 & ... & ...  & \sigma_n^2
+\end{array}\right]
+=
+\left[\begin{array}{c} 
+\epsilon_1^2 & 0 & ...  & 0 \\
+0 & \epsilon_2^2 & ...  & 0 \\
+\vdots & 0 & \ddots  & \vdots \\
+0 & ... & ...  & \epsilon_n^2
+\end{array}\right]
+=
+\left[\begin{array}{c} 
+(y_1-\hat{y_1})^2 & 0 & ...  & 0 \\
+0 & (y_2-\hat{y_2})^2 & ...  & 0 \\
+\vdots & 0 & \ddots  & \vdots \\
+0 & ... & ...  & (y_n-\hat{y_n})^2
+\end{array}\right]
+$$ 
+
+Since we are working with a sample of our population, the $\epsilon$ (i.e., errors) are estimated using the residuals from our linear regression (i.e., $(y-\hat{y})$).
+
+# <font size = "3" color = "FF9300">Robust standard errors</font>
+
+We will use the <font size = "4">[`lmtest`](https://cran.r-project.org/web/packages/lmtest/lmtest.pdf)</font> and <font size = "4">[`sandwich`](https://cran.r-project.org/web/packages/sandwich/sandwich.pdf)</font> packages in R to estimate robust standard errors.
+
+```{r message = F, warning = F}
+
+library(lmtest) #coeftest
+library(sandwich) #vcovHC
+
+#Calculate robust standard errors (robust t-test)
+ols_robust <- coeftest(ols, vcov = vcovHC(ols, type = 'HC0'))
+ols_robust["schlyrs", ]
+
+#Compare to unadjusted model standard errors
+#summary(ols)$coefficients["schlyrs", ]
+
+```
+
+Notice that our robust standard error estimate for the coefficient on "schlyrs" is slightly different from the "non-robust" standard error estimate we saw earlier.
+
+# <font size = "3" color = "FF9300">Bootstrapped confidence intervals</font>
+
+Now we will demonstrate bootstrapped confidence intervals. This is a similar adjustment to the variation in our "schlyrs" estimate, where now instead of adjusting the standard errors directly, we are adjusting the confidence interval around the "schlyrs" estimate. We will use the <font size = "4">[`boot`](https://cran.r-project.org/web/packages/boot/boot.pdf)</font> package to estimate bootstrapped confidence intervals.
+
+```{r message = F, warning = F}
+
+library(boot) #Bootstrapping
+
+#Fit adjusted OLS model
+boot_lm <- function(data, id){
+  fit <- lm(sbp ~ schlyrs + age + age2 + gender + race + southern + mom_ed +
+              dad_ed + year, data = data[id, ])
+  coef(fit)
+  }
+
+#Fit OLS model 50 times and save lower and upper confidence interval
+b <- boot(data, boot_lm, 50)
+ols_ci <- data.frame("index" = NA,
+                     "lower_ci" = NA,
+                     "upper_ci" = NA)
+
+#Get confidence interval for all variables
+for(i in 1:nrow(summary(ols)$coefficient)){
+
+  boot <- boot.ci(b, index = i, type = "perc")
+  ols_ci[i, "index"] = i
+  ols_ci[i, "lower_ci"] = boot$percent[, 4]
+  ols_ci[i, "upper_ci"] = boot$percent[, 5]
+
+  }
+
+#Bind confidence interval to estimate
+ols_est <- cbind(ols_ci[, -1], summary(ols)$coefficient)
+rownames(ols_est) <- rownames(summary(ols)$coefficient)
+ols_est["schlyrs", ]
+
+#Compare to unadjusted model standard errors and confidence intervals
+summary(ols)$coefficients["schlyrs", ]
+confint(ols, "schlyrs", level = 0.95)
+
+```
+
+Notice that the standard error is the same for our bootstrapped model and unadjusted (standard errors or confidence interval) model, but when you compare the confidence intervals, the lower and upper values are no longer the same because we have bootstrapped to adjust for error. It's also important to note that the adjusted confidence interval is wider than the unadjusted model's confidence interval. This is another reflection of how bootstrapped confidence intervals allows for more uncertainty in the estimation.
+
+# <font size = "5" color = "468C8A">Key Takeaways</font>
+
+1. Linear regression approximates the conditional expectation function (CEF)\
+    - Coefficients can be interpreted as the change in the slope of the CEF for a 
+unit change in the exposure
+2. Analytic solution exists to estimating linear regression coefficients
+3. Violations of independent and identically distributed errors assumption can be accounted for in estimating standard errors
+
+# <font size = "6.5" color = "F2494C">Conditional Quantile Regression (CQR)</font>
+
+Just as the CEF describes how the mean of a variable changes as we change values of the conditioning variable(s), the Conditional Quantile Function (CQF) describes how quantiles of a variable changes as we change values of the conditioning variable. For example, in our data, the CQF for SBP at the 50<sup>th</sup> quantile conditional on years of schooling describes how the median changes of SBP changes as we go from those who have 5 years of schooling to 6 years of schooling to 7 years of schooling and so forth. Similarly, the CQF for SBP at the 75th quantile conditional on years of schooling describes how the 75<sup>th</sup> quantile of SBP changes as we go from 5 to 6 all the way to 17 years of schooling.
+
+We read earlier that linear regression models the CEF. In the same way, conditional quantile regression (CQR) models the CQF at the quantile of interest. So, the population CQR is a linear model for the potentially non-linear CQF just as the population linear regression is a linear model for the potentially non-linear CEF. It follows then that the CQR we fit in our sample is an approximation of the population CQR at the quantile of interest, just as the linear regression we fit in our sample is an approximation of the population linear regression.
+
+> Just as linear regression models the conditional expectation function, conditional quantile regression models the conditional quantile function
+
+CQR allows us to understand how an exposure affects the outcome distribution by comparing estimates of the exposure-outcome relationship across multiple quantiles and with respect to the conditional mean. For example, consider a scenario in which the CEF is flat (i.e., slope = 0) and the CQF at the 75<sup>th</sup> quantile has a negative slope. This suggests that as we move to higher values of the conditioning variable, the right tail of the conditional outcome distribution gets pulled closer and closer to the mean, which suggests a reshaping of the outcome distribution.
+
+How do we go about estimating CQR coefficients? Earlier, we saw that estimating quantiles of the conditional distribution of a random variable required minimizing the following:
+
+$$
+min_\beta \sum_{i=1}^{N} \rho_\tau(y_i - g(x_i, \beta)).
+$$
+
+The most basic CQR model replaces $g(x_i, \beta)$ with a linear in parameters model such as $\beta_0 + \beta_1x_i$. This leads to the minimization:
+
+$$
+min_{\beta_0, \beta_1} \sum_{i=1}^{N} \rho_\tau(y_i - \beta_0 - \beta_1x_i).
+$$
+More elaborate CQR models may include non-linear functions of the parameters, but we will not focus on those in our workshop. Rather's let's talk about how we can estimate the coefficients of our linear in parameters CQR model. We learned in the linear regression review that the OLS estimator for linear regression has an analytic solution. This made our life terribly easy. However, we don't have such a luxury in the CQR world: in the minimization above, there is no closed form solution to find $\beta_0$ and $\beta_1$. It follows that there is no closed form solution to a linear in parameters CQR model with more than one independent variable.
+
+As many have asked: what is to be done? Is all hope lost? Not at all! Roger Koenker and Gilbert Bassett Jr., in their 1978 paper introducing CQR, showed us that we can estimate coefficients of the CQR model described above by using linear programming methods to solve the minimization problem [(9)](#references). Linear programming methods are numerical ways of solving optimization problems subject to certain constraints. We will not go into the details of how we can re-express the minimization problem described above as a linear programming problem -- it is rather hairy and honestly not particularly instructive. We will say that there are numerous linear programming optimization methods out there to solve the CQR minimization problem. In most cases, however, the default linear programming choice provided in statistical packages for CQR should be good enough for fitting the model we want to fit.
+
+### <font size = "3" color = "FF9300">Fitting CQR models in R</font>
+
+In R, we fit CQR models by using the function "rq()" from the package <font size = "4">[`quantreg`](https://cran.r-project.org/web/packages/quantreg/quantreg.pdf)</font> to run our conditional quantile regressions. The structure of the command mirrors the structure of the command to fit linear regression using "lm()". Specifically, we can fit CQR models in R as:
+
+rq(formula, tau, data, method, ...)
+
+In the syntax above, formula takes on the structure "y ~ x", tau refers to the quantile of interest, data refers to the dataset being used, and method refers to the optimization method you want to use to solve the linear programming problem to estimate model parameters. The default method is known as the Barrodale and Roberts algorithm (method = "br"). As the authors of the <font size = "4">[`quantreg`](https://cran.r-project.org/web/packages/quantreg/quantreg.pdf)</font> package suggest, the default optimization method should be perfectly fine even if you have a relatively large dataset with several thousand observations.
+
+Let's begin by fitting a model of SBP on years of schooling at the median without any additional control variables and thinking about how we can interpret the estimate. 
+
+```{r message = F, warning = F}
+
+library(quantreg) #Conditional quantile regression
+
+#50th quantile
+cqr_un50 <- rq(sbp ~ schlyrs, data = data, tau = 0.5) 
+summary(cqr_un50)
+
+```
+
+The CQR at the median produces an output that looks very similar to our linear regression output. Notice that we have an intercept term and a coefficient on the "schlyrs" variable. The intercept is our estimate for median SBP among those who have 12 years of schooling (recall that we have centered school years at 12). The coefficient on "schlyrs" can be interpreted as the association of an additional year of schooling with median SBP. So, our results suggest that median SBP among those with 12 years of schooling is 127 mmHg and that each additional year of schooling from 12 years is associated with a 0.9 mmHg reduction in median SBP.
+
+Let's now fit a CQR at the median adjusting for covariates:
+
+```{r message = F, warning = F}
+
+#Preparing data
+data$female <- ifelse(data$gender == 1, 1, 0)
+
+data$black <- ifelse(data$race == 2, 1, 0)
+data$latinx <- ifelse(data$race == 3, 1, 0)
+
+data$y08 <- ifelse(data$year == 2008, 1, 0)
+data$y10 <- ifelse(data$year == 2010, 1, 0)
+data$y12 <- ifelse(data$year == 2012, 1, 0)
+data$y14 <- ifelse(data$year == 2014, 1, 0)
+data$y16 <- ifelse(data$year == 2016, 1, 0)
+data$y18 <- ifelse(data$year == 2018, 1, 0)
+
+#Fully adjusted model
+cqr_adj50 <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern + 
+                mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = 0.5) 
+summary(cqr_adj50)
+
+```
+
+Notice that our adjusted model also produces an output very similar to the adjusted linear regression output. The interpretation of these estimates is also very similar. For instance, the intercept refers to the median SBP among folks with 12 years of schooling, holding all other covariates constant. The coefficient on "schlyrs" is our estimate for the change in median SBP for each additional year of schooling, holding all other covariates constant. Based on our results, a one year increase in total years of schooling from 12 years is associated with a 0.72 mmHg decrease in median SBP, holding all else constant.
+
+Let's fit another adjusted model at the 25<sup>th</sup> quantile just so we get a bit of practice interpreting.
+
+```{r message = F, warning = F}
+
+#Fully adjusted model at 25th quantile
+cqr_adj25 <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern + 
+                mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = 0.25) 
+summary(cqr_adj25)
+
+```
+
+The intercept term in this model is our estimate for the 25<sup>th</sup> quantile of SBP for folks with 12 years of schooling, holding all other covariates constant. The coefficient on "schlyrs" is our estimate for the change in the 25<sup>th</sup> quantile of SBP for each additional year of schooling, holding all other covariates constant. Based on our results, a one year increase in total years of schooling from 12 years is associated with a 0.64 mmHg decrease in the 25<sup>th</sup> SBP quantile, holding all else constant.
+
+# <font size = "5" color = "468C8A">Estimating standard errors</font>
+
+But, coefficients are only part of the story. In any regression analysis, we care deeply about the standard errors too! The default standard error estimation method is the so called "rank inversion" method described in a 2005 paper by Roger Koenker [(11)](#references). This default option assumes that the error term is independent and identically distributed, which is usually not a plausible assumption.
+
+The recommended method of estimating standard errors is to bootstrap them. We can use built-in commands with the <font size = 4>[`quantreg`](https://cran.r-project.org/web/packages/quantreg/quantreg.pdf)</font> package to estimate bootstrap standard errors. In the example below, we show one way of bootstrapping. In this case, the default bootstrap method is used, which involves randomly selecting observations from the data with replacement. In this case, we have specified 50 resamples. 
+
+```{r message = F, warning = F}
+
+#Fully adjusted model
+cqr_adj50 <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern + 
+                mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = 0.5) 
+summary.rq(cqr_adj50, se = "boot", R = 50)
+
+```
+
+Other bootstrap methods are available within the <font size = 4>[`quantreg`](https://cran.r-project.org/web/packages/quantreg/quantreg.pdf)</font> package. These methods include the [Parzen, Wei and Ying (1994)](https://academic.oup.com/biomet/article-abstract/81/2/341/468184) method, He and Hu's (2002) Markov chain bootstrap method [(7)](#references), and the Kocherginsky et. al. (2003) bootstrap method [(8)](#references). There is also a wild bootstrap method due to [Feng et. al. (2011)](https://academic.oup.com/biomet/article-abstract/98/4/995/234840) available. Which method is preferable likely depends on the intricacies of the analysis you are conducting. In general, the default method seems fine for simple, cross-sectional data structures.
+
+Another way of bootstrapping your standard errors would be as follows:
+
+```{r message = F, warning = F}
+
+#Bootstrap ci
+cqr_boot50 <- boot.rq(cbind(1, data$schlyrs, data$age, data$age2, data$female,
+                      data$black, data$latinx, data$southern, data$mom_ed,
+                      data$dad_ed, data$y08, data$y10, data$y12, data$y14,
+                      data$y16, data$y18),
+                data$sbp, tau = 0.5, R = 50)
+ci <- t(apply(cqr_boot50$B, 2, quantile, c(0.025, 0.975)))
+
+```
+
+The standard non-parametric bootstrap estimator used for CQR approximates the "heteroskedasticity" robust standard error estimator for CQR. We are putting heteroskedasticity in quotes because we have not seen this terminology used as much in the quantile regression world. Rather, the assumption is that density of the error term at the $\tau^{th}$ quantile of the conditional error distribution does not equal the density of the error term at the $\tau^{th}$ quantile of the unconditional error distribution: this is somewhat similar in flavor to the heteroskedasticity assumption, but there are subtle differences. In any case, estimating robust standard errors in the CQR framework relies on estimating the inverse of the error density at the $\tau^{th}$ quantile. Since the error density will be sparse where the outcome is sparse, and since the outcome is usually sparse at the tails, a key criticism of CQR is that statistical power is usually a problem at the tails of a distribution, which are generally of substantive interest.
+
+> Key criticism of conditional quantile regression is that statistical power is usually a problem at the tails of the outcome distribution, which is substantively of interest
+
+### <font size = "3" color = "FF9300">Presenting CQR coefficients</font>
+Usually, we want to fit CQR models at multiple quantiles of the conditional outcome distribution to assess how an exposure affects the outcome distribution. But, fitting so many regressions poses a challenge in terms of displaying the results. Imagine that we fit a CQR model for each quantile from the 1<sup>st</sup> to 99<sup>th</sup> quantiles. Do we really want to have a table where we show the coefficient estimates at each quantile? That would look a bit ugly and might turn off our readers.
+
+One way that we have seen CQR results shown in the literature is the following. We fit the CQR model at each quantile from, say, the 1<sup>st</sup> to 99<sup>th</sup> quantiles. We estimate bootstrap standard errors or, at the very least, robust standard errors. We then get estimates for the 95% confidence interval on the point estimate for our exposure. Now, instead of showing each coefficient and confidence interval as a separate row in a table, we will plot them using the built in plot function:
+
+```{r warning = F, message = F}
+
+#Fitting CQR models from the 1st to 99th quantiles
+cqr_all <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern +
+                mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = seq(0.01, 0.99, by = 0.01))
+cqr_plot <- summary(cqr_all, se = "boot", R = 50, confint = TRUE)
+
+#Plotting coefficients
+plot(cqr_plot)
+
+#Clearing environment
+rm(cqr_all, cqr_plot)
+
+```
+
+This is, however, not our favorite way to plot CQR results. We think that rather than plotting the all coefficients, it is perhaps most effective to plot coefficients for the exposure variable only. Additionally, the built in "plot" function is not as flexible as <font size = 4>[`ggplot2`](https://cran.r-project.org/web/packages/ggplot2/ggplot2.pdf)</font>, which we love. So, in order to focus the presentation of results on only the exposure variable and to use ggplot while we're at it, we propose the following method of plotting CQR results:
+
+```{r message = F, warning = F}
+
+library(jtools) #This package has an excellent function called "summ" which we find makes it very easy to extract bootstrap CIs from CQR models
+
+results.matrix <- matrix(NA, 99, 4)
+
+for (i in 1:99) {
+
+  #Estimating quantile regression
+  cqr <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern +
+                mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = i/100)
+
+  #Creating a summary object
+  summ.obj <- summ(cqr, se = "boot", boot.sims = 50, confint = TRUE)
+
+  #Adding quantile marker in results.matrix
+  results.matrix[i, 1] <- i
+
+  #Extracting coefficient on "schlyrs"
+  results.matrix[i, 2] <- summ.obj$coeftable[2,1]
+
+  #Extracting lower bound of 95% confidence interval on the "schlyrs" point estimate
+  results.matrix[i, 3] <- summ.obj$coeftable[2,2]
+
+  #Extracting upper bound of 95% confidence interval on the "schlyrs" point estimate
+  results.matrix[i, 4] <- summ.obj$coeftable[2,3]
+
+}
+
+#Changing matrix to a data frame to plot
+results <- data.frame(results.matrix)
+colnames(results) <- c("quant", "coef", "lci", "uci")
+rm(results.matrix)
+
+#Plotting results
+
+#Axis labels
+yaxis <- expression(Delta~SBP~(mmHg))
+xaxis <- "Quantile"
+
+#Figure
+plot_schlyrs <- ggplot(data = results, aes(x = quant, y = coef)) +
+  geom_line(color = "#468c8a", size = 1) +
+  geom_ribbon(aes(x = quant, ymin = lci, ymax = uci), alpha = 0.45, fill = "#468c8a") +
+  geom_hline(yintercept = 0, color = "#f2494c", linetype = "dotted") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  ylab(yaxis) +
+  xlab(xaxis) +
+  labs(title = "Association of educational attainment with systolic blood pressure") +
+  scale_x_continuous(breaks = seq(10, 90, 10),
+                     labels = c("Q10", "Q20", "Q30", "Q40",
+                                "Q50", "Q60", "Q70", "Q80", "Q90"))
+
+plot_schlyrs
+cqr_results <- results #Saving for later
+
+```
+
+This figure is just a slightly fancier version of the plot that is produced through the in-built plot functionality in the <font size = "4"><font size = 4>[`quantreg`](https://cran.r-project.org/web/packages/quantreg/quantreg.pdf)</font></font> package. We think it looks nicer and could be a good way of displaying CQR results. Notice that educational attainment appears to have a stronger protective association with SBP at higher quantiles of SBP relative to lower quantiles. This suggests that as we go from one level of schooling to another higher level, the SBP distribution is becoming narrower and that the narrowness is due to the higher risk, right tail of the SBP distribution being pulled closer to the center. Notice also how the confidence intervals around the point estimates at higher quantiles is very large: this is an illustration of the idea we saw earlier about how CQR estimates are usually less precise at the tails because data at the tails are usually sparse.
+
+### <font size = "3" color = "FF9300">Illustrating distributional effects</font>
+While the figure above allows us to imagine what sort of effect educational attainment is having on SBP, it doesn't show us explicitly what's happening. Wouldn't it be nice to see, for instance, a density plot at a reference level of educational attainment and then another plot at, say, a higher level of educational attainment and compare those two density plots? Now we're going to create something like that. Please note that this plot has numerous assumptions built into it, which we will discuss in greater detail below. We also want to acknowledge that this plot was inspired by what we saw in Bind et. al. (2015) and Bind et. al. (2017) [(1-2)](#references), and we thank Dr. Bind for the generous insights she provided into how she created the plot.
+
+We are going to create this plot as follows: first, we are going to restrict our data to those who have 12 years of schooling. Then, we are going to determine what quantile each individual with 12 years of schooling lies in from the 1<sup>st</sup> to 99<sup>th</sup> quantile of the SBP distribution. Following this, we are going to merge in the association of education with SBP at each quantile. Finally, we are going to predict the new value of SBP for each individual with 12 years of schooling had they had a standard deviation increase in years of schooling.
+
+```{r message = F, warning = F}
+
+library(statar) #To make the binning process easy
+
+#Subsetting those with 12 years of schooling (Note that we have centered our educational attainment variable at 0, which is why we are setting schlyrs == 0 here)
+data_12years <- data %>%
+  filter(schlyrs == 0) %>%
+  select("sbp") #Keeping only the SBP variable to keep things neat and clean
+
+#Determining the 1st-99th quantile of SBP for those with 12 years of schooling
+data_12years$quant <- xtile(data_12years$sbp, n = 99)
+
+#Creating a dataset of only our coefficient estimates
+coef_estimates <- results %>% select("quant", "coef")
+
+#Merging coefficient estimates with the SBP data for those with 12 years of schooling
+data_12years <- data_12years %>% inner_join(coef_estimates, by = "quant")
+
+#Creating a counterfactual SBP value
+data_12years$counterfactual_sbp <- data_12years$sbp + (data_12years$coef * sd(data$schlyrs))
+
+#Creating a density plot with old density and counterfactual density
+dist_effect <- ggplot(data = data_12years) +
+  geom_density(aes(x = sbp, y = ..density..), color = "#468c8a", size = 1.5) +
+  geom_density(aes(x = counterfactual_sbp, y = ..density..),
+               color = "#f2494c", size = 1.5, linetype = "dotted") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  ylab("Density") +
+  xlab("Systolic blood pressure") +
+  labs(title = "Empirical and counterfactual SBP density for individuals with 12 years of school")
+
+dist_effect
+
+```
+
+In the figure above, the solid teal density represents the empirical density of SBP for folks with 12 years of schooling in our data. The dotted rose density represents the SBP density we expect had these individuals experienced a standard deviation increase in years of schooling (~2.4 years). As we would expect based on our point estimates from the different quantile regression models, the right tail of the distribution is being pulled closer to the center in the counterfactual SBP distribution whereas the left tail is relatively unaffected. We think this is an interesting way of visualizing the distributional "effect" of education on SBP among the largest group of folks in our sample in terms of educational attainment.
+
+But, as we said earlier, this figure makes some important assumptions which may or may not hold. The first assumption is that we assume the relationship of education with SBP is the same within unit quantile intervals. For instance, we assume that the relationship of education and SBP between the 10<sup>th</sup> and 11<sup>th</sup> quantiles is the same as the estimated relationship between education and SBP at the 10<sup>th</sup> quantile. This may be an okay assumption to make -- certainly we don't think it's particularly devastating. 
+
+```{r message = F, warning = F}
+
+#Determining quantiles of the counterfactual SBP distribution
+data_12years$quant_new <- xtile(data_12years$counterfactual_sbp, n = 99)
+
+#Checking how many quantiles change
+data_12years$change <- data_12years$quant - data_12years$quant_new
+table(data_12years$change)
+
+```
+
+Another assumption that we appear to effectively make is that of rank invariance. That is, individuals with 12 years of schooling maintain their rank in the SBP distribution even when their education increases by ~2.4 years. Notice how only about 9 folks actually change their quantile value per the table above. Those who work in quantile regressions usually find the rank invariance assumption a bit difficult to justify. We too think that rank invariance is a strong assumption here: we should probably expect a bit more changes in rank under different exposure levels due to randomness. 
+
+### <font size = "3" color = "FF9300">Post-estimation tests</font>
+Fitting so many CQR results raises the question: are our estimates at, say, the 10<sup>th</sup> quantile really different from our estimates at the 90<sup>th</sup> quantile? This is a question we've had in our group a number of times too. We use the anova test in the <font size = "4"><font size = 4>[`quantreg`](https://cran.r-project.org/web/packages/quantreg/quantreg.pdf)</font></font> package to test this hypothesis. For example, say we wanted to test if the 10<sup>th</sup> quantile estimate is statistically different from the 50<sup>th</sup> quantile estimate and if that's different from the 90<sup>th</sup> quantile estimate. We may want to know this in order to understand if our data suggest that a location shift hypothesis best describes the exposure-outcome relationship or if the exposure indeed reshapes the outcome distribution. We can do this test as follows:
+
+```{r message = F, warning = F}
+
+#Fitting CQR at the 10th, 50th, and 90th quantiles
+cqr_mod10 <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern 
+                + mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = 0.1) 
+  
+cqr_mod50 <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern 
+                + mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = 0.5) 
+  
+cqr_mod90 <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern 
+                + mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = 0.9)
+
+#Testing the difference in coefficients
+anova(cqr_mod10, cqr_mod50, cqr_mod90)
+
+```
+
+The test above compared the coefficient on the years of schooling variable across the three models. Additionally, it compared the coefficient on all other covariates included in our model. Then, it gave us a p-value for the significance of all these coefficients being jointly identical. The test procedure is described in [Koenker and Bassett (1982)](https://www.jstor.org/stable/1912528). The p-value above suggests that the coefficients are, in fact, statistically distinct from one another at the 5% level.
+
+However, what we really wanted to test was whether the coefficient on years of schooling was identical across the three models and not whether all coefficients together were identical. We haven't figured out a way to do this exactly, but one approach, which isn't entirely satisfactory, is to fit the unadjusted CQR models and then compare them using "anova".
+
+```{r warning = F, message = F}
+
+#Fitting CQR at the 10th, 50th, and 90th quantiles, unadjusted models
+cqr_mod10_unadj <- rq(sbp ~ schlyrs, data = data, tau = 0.1) 
+  
+cqr_mod50_unadj <- rq(sbp ~ schlyrs, data = data, tau = 0.5) 
+  
+cqr_mod90_unadj <- rq(sbp ~ schlyrs, data = data, tau = 0.9)
+
+#Testing the difference in coefficients
+anova(cqr_mod10_unadj, cqr_mod50_unadj, cqr_mod90_unadj)
+
+```
+
+# <font size = "3" color = "FF9300">CQR function</font>
+
+Below, we also provide a function that loops through and fits conditional quantile regressions at the 10<sup>th</sup>, 25<sup>th</sup>, 50<sup>th</sup>, 75<sup>th</sup>, and 90<sup>th</sup> quantiles of the conditional outcome distribution.
+
+```{r message = F, warnings = F}
+
+cqr_func <- function(data){
+  
+  conditional_results <- data.frame()
+  
+  for(i in c(0.10, 0.25, 0.50, 0.75, 0.90)){
+    
+    i <- round(i, 2)
+    
+    con <- rq(sbp ~ schlyrs + age + age2 + female + black + latinx + southern + 
+                mom_ed + dad_ed + y08 + y10 + y12 + y14 + y16 + y18,
+              data = data, tau = i) 
+    
+    #Bootstrap estimate (with SE)
+    coef <- summary(con, se = "boot", R = 500)
+
+    #Bootstrap ci
+    boot <- boot.rq(cbind(1, data$schlyrs, data$age, data$age2, data$female,
+                          data$black, data$latinx, data$southern, data$mom_ed,
+                          data$dad_ed, data$y08, data$y10, data$y12, data$y14,
+                          data$y16, data$y18),
+                    data$sbp, tau = i, R = 500) #Takes a little while to run
+    ci <- t(apply(boot$B, 2, quantile, c(0.025, 0.975)))
+
+    #Combine estimate and CI
+    cqr_est <- cbind(i, ci, coef$coefficient)
+    rownames(cqr_est) <- rownames(coef$coefficient)
+    
+    schlyr_est <- data.frame(t(cqr_est["schlyrs", 1:4]))
+    
+    conditional_results <- rbind(conditional_results, schlyr_est)
+    
+  }
+  
+  names(conditional_results) <- c("quantile", "lower_ci", "upper_ci",
+                                  "estimate")
+  conditional_results <- conditional_results %>%
+    dplyr::select(quantile, lower_ci, estimate, upper_ci)
+  return(conditional_results)
+  
+}
+
+#Run CQR function for desired quantiles
+#cqr_results <- cqr_func(data)
+##Warning: Solution may be nonunique (Produced because of categorical variables in the model)
+
+```
+
+# <font size = "5" color = "468C8A">Key takeaways</font>
+
+1. Just as linear regression models the CEF, CQR models the CQF\
+    - The CQF can be defined for any quantile of interest
+2. CQR coefficients can be estimated by minimizing the sum of $\rho_\tau(.)$ which does not have an analytic solution\
+    - Coefficients can be interpreted as the change in the conditional quantile of interest for a unit change in the exposure
+3. CQR standard errors are inversely proportional to the error density, because of which in parts of the outcome distribution where outcome data are sparse, standard errors are larger\
+    - Bootstrap is the preferred method of estimating the standard errors
+
+
+# <font size = "6.5" color = "F2494C">Unconditional Quantile Regression (UQR)</font>
+
+# <font size = "5" color = "468C8A">Counterfactual distributions</font>
+
+Now that we have worked through estimating quantiles of the conditional outcome distribution, we will delve into estimating quantile of the unconditional outcome distribution. What would we do if we wanted to learn how the unconditional outcome distribution changed in response to some population-level intervention? How can we contrast quantiles of the factual and counterfactual distributions? 
+
+First, you might be wondering if we could use conditional quantile regressions to estimate contrasts of the unconditional outcome distribution. And the answer is, it depends!
+
+Borah and Basu (2013) [(3)](#references) suggest that CQR can quantify these contrasts under some stringent assumptions: 1) the outcome is only a function of the exposure or 2) the exposure only induces a location shift in the outcome in the presence of other covariates. If an exposure interacts with other covariates in the data generating process -- which is quite likely given how complex our world is -- then CQR cannot estimate contrasts of the unconditional outcome distribution.
+
+Several methods have been developed to estimate contrasts between the factual and counterfactual unconditional outcome distributions. For this workshop, we will focus on a method developed by Sergio Firpo, Nicole Fortin, and Thomas Lemieux (2009) [(5-6)](#references). We focus on this method because it is a regression-based method (and so compares nicely with CQR and linear regression), is relatively easy to implement, and is quite popular in the economics literature.
+
+>Firpo's unconditional quantile regression method quantifies the change in the $\tau^{th}$ quantile of the unconditional outcome distribution changes for a small change in the exposure distribution. 
+
+At the heart of Firpo's method is the recentered influence function (RIF). The RIF is the sum of a distributional statistic's influence function and the distributional statistic itself. Let's break this down a bit.
+
+Influence functions are a way of assessing the "robustness" of distributional statistic in that they allow us to compute by how much, say, the mean of a distribution would change if we made a "small" perturbation to the existing distribution. Distributional statistics can be anything from means to quantiles to Gini coefficients. Each distributional statistic has an influence function specific to it, and the influence function for the $\tau^{th}$ quantile of Y is:
+
+$$IF(y; q_{\tau}) = \frac{\tau - I(y \leq q_{\tau})}{f_y(q_{\tau})}$$
+
+where $q_{\tau}$ is the value of a random variable $Y$ at the $\tau^{th}$ quantile, $I(y \leq q_{\tau})$ is an indicator function for an individual falling above or below $q_{\tau}$, and $f_y(q_{\tau})$ is the density of Y at the $\tau^{th}$ quantile. 
+
+Firpo then defines the RIF for the $\tau^{th}$ quantile as 
+
+$$RIF(y;q_{\tau}) = q_{\tau} + IF(y; q_{\tau}) = q_{\tau} + \frac{\tau - I(y \leq q_{\tau})}{f_y(q_{\tau})}$$
+
+A nice property of the RIF is that its mean equals the distributional statistic of interest. Note that in the case of quantiles: 
+
+$$E[RIF(y; q_{\tau})] = E[q_{\tau} + \frac{\tau - I(y \leq q_{\tau})}{f_y(q_{\tau})}] = E[q_{\tau}] + E[\frac{\tau - I(y \leq q_{\tau})}{f_y(q_{\tau})}] = q_\tau$$
+
+because $E[\frac{\tau - I(y \leq q_{\tau})}{f_y(q_{\tau})}]=0$ (since the numerator of this equation is $\tau - \tau$ in expectation).
+
+Firpo then proposes using the RIF as the outcome in a regression model to estimate the change in the $\tau^{th}$ quantile of the unconditional outcome distribution for a small change in the unconditional distribution of the exposure. They call this modeling strategy the RIF-regression and propose several ways of estimating the RIF-regression, one of which is OLS. 
+
+The Firpo method has three main steps:
+
+1. Estimate the RIF in the unconditional outcome distribution
+2. Regress the RIF on the exposure and covariates
+3. Estimate standard errors using bootstrapping or the sandwich estimator
+
+First, we will use the package <font size = "4"> [`dineq`](https://cran.r-project.org/web/packages/dineq/dineq.pdf)</font>
+to estimate the recentered influence function (RIF) at certain quantiles of the unconditional outcome distribution. Note that RIF values can be found for any quantile between (0,1). 
+
+# <font size = "3" color = "FF9300">Finding the RIF</font>
+
+```{r message = F, warning = F}
+
+library(dineq) #RIF package
+
+
+#RIF at q25
+data$rif_q25 <- rif(data$sbp, weights = NULL, method = "quantile", 
+                    quantile = 0.25)
+data$rif_q25_r <- round(data$rif_q25, 2)
+
+rif25 <- ggplot(aes(x = factor(rif_q25_r)), data = data) +
+  geom_bar(width = 0.2, fill = "#F2494C") + 
+  labs(x = "RIF Value",
+       y = "Count",
+       title = "25th Quantile") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+
+rif25
+
+```
+
+Using the 25<sup>th</sup> quantile as an example, we will show how the expected value of the recentered influence function equals the $\tau^{th}$ quantile. 
+
+$$RIF(SBP_i;q_{0.25}) = q_{0.25} + \frac{\tau - I(SBP_i \leq q_{0.25})}{f_y(q_{0.25})} = 114 + \frac{\tau - I(SBP_i \leq 114)}{f_y(114)} = \begin{equation}
+    \begin{cases}
+      75.94, I(SBP_i \leq 114) \\
+      126.69, I(SBP_i > 114)
+    \end{cases}
+  \end{equation}$$
+
+At the 25<sup>th</sup> quantile, the recentered influence function takes on the value 75.94 for the 25% of participants who fall below the threshold (i.e., $q_{0.25}$ = 114mmHg) and 126.69 for the 75% of participants who fall above the 25<sup>th</sup> threshold. The weighted average of these values (i.e., the mean value of the RIF) equals 114mmHg, which is the 25<sup>th</sup> quantile of the unconditional distribution of SBP in our data.
+
+$$E[RIF(SBP_i;q_{0.25})] = (0.25)(75.94) + (0.75)(126.69) = 114 = q_{\tau}$$
+
+# <font size = "3" color = "FF9300">Comparing different quantile's RIF values</font>
+
+Now, we will find the RIF values for the 50<sup>th</sup> and 75<sup>th</sup> quantiles to make comparisons of their RIF values.
+
+```{r message = F, warning = F}
+
+#RIF at q50
+data$rif_q50 <- rif(data$sbp, weights = NULL, method = "quantile", 
+                    quantile = 0.50)
+data$rif_q50_r <- round(data$rif_q50, 2)
+
+rif50 <- ggplot(aes(x = factor(rif_q50_r)), data = data) +
+  geom_bar(width = 0.2, fill = "#468C8A") + 
+  labs(x = "RIF Value",
+       y = "Count",
+       title = "50th Quantile") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+
+
+#RIF at q90
+data$rif_q75 <- rif(data$sbp, weights = NULL, method = "quantile", 
+                    quantile = 0.75)
+data$rif_q75_r <- round(data$rif_q75, 2)
+
+rif75 <- ggplot(aes(x = factor(rif_q75_r)), data = data) +
+  geom_bar(width = 0.2, fill = "#FF9300") + 
+  labs(x = "RIF Value",
+       y = "Count",
+       title = "75th Quantile") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+
+
+#Combine
+rif_vals <- data %>%
+  ungroup() %>%
+  dplyr::select(id, ends_with("_r")) %>%
+  rename("q25" = "rif_q25_r",
+         "q50" = "rif_q50_r",
+         "q75" = "rif_q75_r") %>%
+  pivot_longer(!id, names_to = "Quantile", values_to = "RIF_Values")
+
+rif_comb <- ggplot(aes(x = RIF_Values, fill = factor(Quantile)),
+                   data = rif_vals) +
+  geom_bar(width = 5) +
+  labs(x = "RIF Value",
+       y = "Count",
+       fill = "Quantile",
+       title = "25th, 50th, and 75th Quantiles") +
+  scale_fill_manual(values = c("#F2494C", "#468C8A", "#FF9300")) + 
+  scale_x_continuous(breaks = seq(25, 300, by = 25)) +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+
+
+rif_comb
+#(rif25 | rif50) / (rif75 | rif_comb)
+
+```
+
+The first thing to note as we move from RIF values at the 25<sup>th</sup> to 50<sup>th</sup> to 75<sup>th</sup> quantile is the change in the proportion of participants who fall above or below $q_\tau$ (i.e., those with the lower RIF value vs. those with the higher RIF value). Next, it is important to note that the RIF will only take on two values (with respect to the quantile) because of the indicator function included when calculating the RIF. Finally, as quantiles increase, the RIF values also increase, since their weighted average (i.e., the mean value of the RIF) is expected to equal the $\tau^{th}$ quantile of the unconditional distribution of SBP in our data.
+
+# <font size = "5" color = "468C8A">Estimating and interpreting coefficients</font>
+
+Now that we have estimated the recentered influence function in the unconditional outcome distribution, we regress the RIF on the exposure and covariates. There are three ways of regressing the RIF on the exposure and covariates: 
+
+1. Linear regression using ordinary least squares (OLS) with RIF as the outcome (RIF-OLS)
+2. Logistic regression using $I(y > q_\tau)$ as the outcome (RIF-Logit)
+3. Polynomial regression to model $I(y > q_\tau)$ (RIF-NP)
+
+We will focus on RIF-OLS since it is the easiest to implement and the most practical, but the original equation for the recentered influence function can be rearranged to isolate the $I(y > q_\tau)$ term that RIF-Logit and RIF-NP use, where
+
+$$RIF(y;q_{\tau}) = q_{\tau} + \frac{\tau - I(y \leq q_{\tau})}{f_y(q_{\tau})} = \frac{1}{f_y(q_{\tau})}I(y > q_\tau) + q_\tau - \frac{1-\tau}{f_y(q_{\tau})}$$
+
+We will go over an example of fitting the RIF-OLS regression for SBP at the 25<sup>th</sup> quantile of the unconditional distribution. Specifically, we will fit the equation:
+
+$$E[RIF(SBP_i;q_{0.25})|X,C] = \alpha_{0, 0.25} + \alpha_{1, 0.25}x_i + \lambda_{0.25}'C$$
+
+where $x_i$ is our exposure, or number of school years in the context of our example, and $C$ is a matrix of all the additional covariates included in the model.
+
+If we take the expectation of the expression above, we iterate the expectation on the left hand side of the equation and distribute the expectation of the right hand, leaving us with 
+
+$$E[E[RIF(SBP_i;q_{0.25})|X,C]] = E[\alpha_{0, 0.25} + \alpha_{1, 0.25}x_i + \lambda_{0.25}'C]$$
+
+$$E[RIF(SBP_i;q_{0.25})|X,C] = \alpha_{0, 0.25} + \alpha_{1, 0.25}E[X] + \lambda_{0.25}'E[C]$$
+
+Where the left hand side of the equation is the expectation of the RIF (i.e., $q_{0.25}$), $\alpha_{0, 0.25}$ is the intercept of the sample regression line, and $\alpha_{1, 0.25}$ is the slope of the sample regression line. 
+
+> Firpo's method "tricks" a regression model into modeling quantiles of the unconditional outcome distribution by using the recentered influence function as the outcome
+
+# <font size = "3" color = "FF9300">UQR coefficients at the 25th quantile</font>
+
+```{r message = F, warning = F}
+
+data$rif25 <- rif(data$sbp, weights = NULL, method = "quantile",
+                  quantile = 0.25)
+data$rif25 <- round(data$rif25, 2)
+
+
+uqr_25 <- lm(rif25 ~ schlyrs + age + age2 + gender + race + southern +
+               mom_ed + dad_ed + year, data = data)
+
+summary(uqr_25)$coefficients["schlyrs", ]
+
+```
+
+Coefficients of the RIF-OLS model are interpreted differently than traditional linear regression coefficients. Since 
+
+$$E[\widehat{RIF(SBP_i;q_{\tau})}] = \widehat{\alpha_{0, \tau}} + \widehat{\alpha_{1, \tau}}E[X] + \widehat{\lambda_{\tau}'}E[C]$$
+
+$\widehat{\alpha_{1, \tau}}$ is the estimated change in the $\tau^{th}$ quantile of the unconditional distribution of $Y$ for 
+a unit change in **the mean** of the unconditional distribution of the exposure $X$.
+
+>RIF-OLS estimates the change in the outcome's uncondtional distribution for a unit change in the mean of the unconditional distribution of the exposure
+
+In the context of our example, unconditional quantile regression answers the question: By how much does the $\tau^{th}$ quantile of the unconditional SBP distribution change if the mean of the unconditional education distribution changed by one unit?
+
+The answer? The coefficient on "schlyrs" is our estimate for the change in the 25th quantile of the unconditional SBP distribution for an additional year in the mean of "schlyrs". Based on our results, a one year increase in the mean total years of schooling from 12 years is associated with a 0.49 mmHg decrease in the 25th quantile of the unconditional SBP distribution.
+
+# <font size = "5" color = "468C8A">Estimating standard errors</font>
+
+There are two approaches to estimating the standard error for RIF regressions. The first -- and preferred -- method is the bootstrap. When bootstrapping, you resample with replacement 500+ times, fit RIF-OLS regression in each sample, then use the 2.5<sup>th</sup> and 97.5<sup>th</sup> quantiles of the "sampling distribution" (i.e., the 500+ samples).
+
+The second method is to estimate heteroskedasticity robust standard errors. These can be estimated the same way we estimate heteroskedastic robust standard errors for linear regression, by using $se(\hat{\beta})=(X'X)^{-1}X' \Omega X(X'X)^{-1}$ 
+where $\Omega$ is the variance-covariance matrix
+
+$$
+\Omega = 
+\left[\begin{array}{cccc} 
+\sigma_1^2 & 0 & ...  & 0 \\
+0 & \sigma_2^2 & ...  & 0 \\
+\vdots & 0 & \ddots  & \vdots \\
+0 & ... & ...  & \sigma_n^2
+\end{array}\right]
+=
+\left[\begin{array}{c} 
+\epsilon_1^2 & 0 & ...  & 0 \\
+0 & \epsilon_2^2 & ...  & 0 \\
+\vdots & 0 & \ddots  & \vdots \\
+0 & ... & ...  & \epsilon_n^2
+\end{array}\right]
+=
+\left[\begin{array}{c} 
+(y_1-\hat{y_1})^2 & 0 & ...  & 0 \\
+0 & (y_2-\hat{y_2})^2 & ...  & 0 \\
+\vdots & 0 & \ddots  & \vdots \\
+0 & ... & ...  & (y_n-\hat{y_n})^2
+\end{array}\right]
+$$ 
+
+# <font size = "5" color = "468C8A">UQR in R</font>
+
+We will use the <font size = "4">
+[`dineq`](https://cran.r-project.org/web/packages/dineq/dineq.pdf)</font> package to run our unconditional quantile regressions using Firpo's recentered influence function method (RIF-OLS). 
+
+# <font size = "3" color = "FF9300">Presenting UQR coefficients</font>
+
+We provide a function that loops through and fits unconditional quantile regressions at the 1<sup>st</sup> to 99<sup>th</sup> quantiles of the unconditional outcome distribution. We will use this function to get estimates at every quantile and estimate the bootstrapped 95% confidence intervals. The bootstrap function should look familiar since it is almost the exact same as what we saw in the linear regression section. All we did was add a step to calculate the RIF values first!
+
+```{r message = F, warning = F}
+
+uqr_func <- function(data){
+  
+  #Create an empty dataframe for results
+  uqr_results <- data.frame()
+  
+  for(i in seq(0.01, 0.99, by = 0.01)){
+    
+    #Round to prevent precision errors
+    i <- round(i, 2)
+    
+    #Find the RIF values at the i-th quantile
+    data$rif_sbp <- rif(data$sbp, weights = NULL, method = "quantile",
+                        quantile = i)
+    
+    #Fit an adjusted ols model with the RIF value as the outcome
+    uqr <- lm(rif_sbp ~ schlyrs + age + age2 + gender + race + southern + 
+                mom_ed + dad_ed + year, data = data)
+
+    #Bootstrap ci
+    boot_uqr <- function(data, id){
+      
+    fit <- lm(rif_sbp ~ schlyrs + age + age2 + gender + race + southern + 
+                mom_ed + dad_ed + year, data = data[id, ])
+    coef(fit)
+    }
+
+    #Note that replications were reduced to 50 from 500+ to save time! 
+    b <- boot(data, boot_uqr, 50)
+    uqr_ci <- data.frame("quantile" = NA,
+                         "lower_ci" = NA,
+                         "upper_ci" = NA)
+
+    for(j in 1:nrow(summary(uqr)$coefficient)){
+  
+      boot <- boot.ci(b, index = j, type = "perc")
+      uqr_ci[j, "quantile"] = i
+      uqr_ci[j, "lower_ci"] = boot$percent[, 4]
+      uqr_ci[j, "upper_ci"] = boot$percent[, 5]
+  }
+
+    uqr_est <- cbind(uqr_ci, summary(uqr)$coefficient)
+    
+    #Isolate school years
+    uqr_schlyr_est <- data.frame(uqr_est[2, 1:4])
+    
+    uqr_results <- rbind(uqr_results, uqr_schlyr_est)
+    
+  }
+  
+  names(uqr_results) <- c("quantile", "lower_ci", "upper_ci", "estimate")
+  uqr_results <- uqr_results %>%
+    dplyr::select(quantile, lower_ci, estimate, upper_ci)
+  
+  return(uqr_results)
+  
+}
+
+#Run UQR function for desired quantiles
+uqr_results <- uqr_func(data)
+
+```
+
+After we get the results from our function, we can plot the estimates and 95% confidence intervals of every quantile from the 1<sup>st</sup> to the 99<sup>th</sup>. The estimate at each quantile is represented by the solid tangerine line with confidence intervals represented by the lighter tangerine bands around the solid line.
+
+# <font size = "3" color = "FF9300">RIF-OLS with bootstrapped confidence intervals</font>
+
+```{r message = F, warning = F}
+
+ggplot(data = uqr_results, aes(x = quantile, y = estimate)) +
+  geom_line(color = "#FF9300", size = 1) +
+  geom_ribbon(aes(x = quantile, ymin = lower_ci, ymax = upper_ci), 
+              alpha = 0.45, fill = "#FF9300") +
+  geom_hline(yintercept = 0, color = "#f2494c", linetype = "dotted") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  ylab(Delta ~ "SBP (mmHg)") +
+  xlab("Quantile") +
+  labs(title = "Association of educational attainment with systolic blood pressure") +
+  scale_x_continuous(breaks = seq(0.10, 0.90, 0.10),
+                     labels = c("Q10", "Q20", "Q30", "Q40",
+                                "Q50", "Q60", "Q70", "Q80", "Q90"))
+
+```
+
+From this graphic, we can see a one year increase in the mean total years of schooling from 12 years is associated with a decrease in SBP at all quantiles. Decreases are larger at higher quantiles of the unconditional SBP distribution (i.e., those most at risk), which suggests a reshaping of the unconditional distribution. Specifically, the right tail (i.e., high-risk tail) is being pulled closer to the mean, reshaping the unconditional distribution.
+
+# <font size = "3" color = "FF9300">RIF-OLS with robust standard errors</font>
+
+While bootstrapping is the preferred method, we can also calculate robust standard errors for our RIF-OLS models. This is done the same way as calculating robust standard errors for regular OLS, but now we are using our RIF values as the outcome. We will use the 25<sup>th</sup> quantile as an example.
+
+```{r message = F, warning = F}
+
+data$rif25 <- rif(data$sbp, weights = NULL, method = "quantile",
+                  quantile = 0.25)
+data$rif25 <- round(data$rif25, 2)
+
+uqr_25 <- lm(rif25 ~ schlyrs + age + age2 + gender + race + southern +
+               mom_ed + dad_ed + year, data = data)
+uqr_robust <- coeftest(uqr_25, vcov = vcovHC(ols, type = 'HC0'))
+uqr_robust["schlyrs", ]
+
+#Compare to unadjusted standard errors
+summary(uqr_25)$coefficients["schlyrs", ]
+
+```
+
+# <font size = "3" color = "FF9300">Post-estimation tests</font>
+
+Unfortunately, and unlike CQR, we cannot use the "anova()" function to make comparisons between our quantile estimates. Because RIF-OLS uses the RIF values at specific quantiles as the outcome, anova cannot compare values from one quantile to another. We are currently looking into ways to make comparisons between quantile estimates of the unconditional quantile regression.
+
+# <font size = "5" color = "468C8A">Key takeaways</font>
+
+1. Estimating the change in the unconditional quantile using conditional quantile regression estimates is difficult
+    - Using alternative methods like Firpo that estimate the unconditional quantile directly is easy
+2. The RIF-regression method captures the change in quantiles of the unconditional distribution for a small change in the exposure distribution
+    - Since it includes an indicator function, the RIF will only take on two values
+3. Recentered influence function (RIF) regression involves regressing the RIF at the exposure and other covariates (e.g., using OLS)
+    - We are "tricking" a regression to model the unconditional quantiles by using the RIF as the outcome
+
+# <font size = "6.5" color = "F2494C">Summarizing linear regression, CQR, and UQR</font>
+
+# <font size = "5" color = "468C8A">Choosing between unconditional and conditional quantiles</font>
+
+Choosing between conditional and unconditional quantiles really depends on what research question you are interested in investigating. Are you interested in making comparisons of the exposure-outcome relationship at different quantiles across groups based on individual characteristics? In such a case, you are likely interested in quantiles of the conditional outcome distribution, where the conditioning variables are those individual-level characteristics. On the other hand, if you are interested in understanding what would happen to the distribution of an outcome in the entire population under different levels of an exposure, then you may be interested in quantiles of the unconditional outcome distribution. 
+
+Some additional nuances: if you believe that your exposure of interest only leads to a location shift in the outcome distribution, then the conditional and unconditional quantiles coincide and you don't need to choose between the two. In fact, in such a scenario, you really don't need to do quantile regressions at all and mean models will be perfectly adequate in capturing distributional effects of an exposure. However, if you believe that the exposure: 1) affects the variance of the outcome distribution and 2) interacts with other covariates you include in your model, then the conditional and unconditional quantiles will not coincide and you will need to be careful about identifying which outcome distribution you are truly interested in.
+
+
+# <font size = "5" color = "468C8A">Comparing estimation strategies and intpretiations</font>
+
+We provide a quick table to compare the differences between linear regression, conditional quantile regression, and unconditional quantile regression. 
+
+|     | \textbf{Linear Regression} | \textbf{Conditional Quantile Regression} | \textbf{Unconditional Quantile Regression} 
+------------------- | ------------------- | ------------------- | ------------------- |
+||||| 
+Model | $E[Y|X] = X'\beta$ | $Q_\tau(Y|X)=X'\beta_\tau$ where $\tau = (0,1)$ | $E[RIF(Y;q_\tau)|X]=X'\beta_\tau$ where $\tau = (0,1)$|
+|||||
+Error | Standard assumptions about the error term (iid, Normal distribution) are usually violated | No distributional assumption is made about the error | No explicit assumption, but likely the same assumptions as the estimation strategy used |
+|||||
+Estimating coefficients | $\hat{\beta}=(X'X)^{-1}X'Y$ (analytic solution) | $min_\hat{\beta}\sum_{i=1}^{N} \rho_\tau(y_i - x_i^{'}\hat{\beta})$ (use linear programming methods) | Method of estimation depends on the estimator used (e.g., RIF-OLS) |
+|||||
+Estimating standard errors | Several estimators are available + bootstrap | Several estimators are available and key point is that we need to estimate the error density + bootstrap | Same estimators available as would be for choice of estimator |
+|||||
+Interpretation | One unit increase in the independent variable of interest is associated with a $\hat{\beta}$ unit change in the conditional mean of the outcome | One unit increase in the independent variable of interest is associated with a $\hat{\beta}$ unit change in the $\tau^{th}$ quantile of the conditional outcome distribution | One unit increase in the mean of the independent variable of interest is associated with a $\hat{\beta}$ unit change in the $\tau^{th}$ quantile of the unconditional outcome distribution |
+
+You can also find this table in the presentation slide deck in the [repository](https://github.com/JillianHebert/A-Primer-on-Quantile-Regression-for-Epidemiologists) for the formatted version.
+
+# <font size = "5" color = "468C8A">Comparing model estimations</font>
+
+Since the confidence intervals can get quite wide at the tails of the distribution, due to low density, we tend to present results from the 10<sup>th</sup> through the 90<sup>th</sup> quantiles. You will see this trimming reflected in the plot below.
+
+> CQR and UQR estimates may be quite different, but even when they are similar, remember that they are estimating quite different estimands
+
+# <font size = "3" color = "FF9300">Model estimates plot</font>
+
+```{r message = F, warning = F}
+
+#Using results created earlier in the document
+#ols_results
+ols_results <- ols_est["schlyrs", 1:3]
+ols_results$quantile <- -0.1
+ols_results <- ols_results %>%
+  dplyr::select(quantile, Estimate, lower_ci, upper_ci) %>%
+  rename("estimate" = "Estimate")
+ols_results$regtype = "OLS"
+
+#cqr_results
+names(cqr_results) <- c("quantile", "estimate", "lower_ci", "upper_ci")
+cqr_results_r <- cqr_results %>%
+  dplyr::filter(between(quantile, 10, 91))
+range(cqr_results_r$quantile)
+cqr_results_r$regtype = "CQR"
+
+#uqr_results
+uqr_results$quantile <- uqr_results$quantile * 100
+uqr_results <- uqr_results %>%
+  dplyr::select(quantile, estimate, lower_ci, upper_ci)
+uqr_results_r <- uqr_results %>%
+  dplyr::filter(between(quantile, 10, 90))
+range(uqr_results_r$quantile)
+uqr_results_r$regtype = "UQR"
+
+
+results <- rbind(ols_results, cqr_results_r, uqr_results_r)
+results$regtype <- factor(results$regtype, levels = c("OLS", "CQR", "UQR"))
+names(results) <- c("Quantile", "Estimate", "Lower", "Upper", "regtype")
+
+results$Quantile <- ifelse(results$Quantile == -0.1, 0.01, results$Quantile)
+ggplot(data = results %>% filter(regtype != "OLS"),
+       aes(x = Quantile, y = Estimate, group = regtype,
+           color = regtype, fill = regtype)) +
+  geom_line(alpha = 50, linewidth = 0.75) +
+  geom_ribbon(aes(ymin = Lower, ymax = Upper), alpha = 0.27, color = NA) +
+  geom_point(data = results %>% filter(regtype == "OLS")) +
+  geom_errorbar(data = results %>% filter(regtype == "OLS"),
+                aes(ymin = Lower, ymax = Upper), width = 0.01) +
+  geom_hline(yintercept = 0, alpha = 0.5) +
+  geom_vline(xintercept = 5, color = "red", linetype = "dashed") +
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "bottom")  +
+  scale_color_manual(breaks = c("OLS", "CQR", "UQR"),
+                     labels = c("OLS", "CQR", "UQR"),
+                     values = c("#F2494C", "#468C8A", "#FF9300")) +
+  scale_fill_manual(breaks = c("OLS", "CQR", "UQR"),
+                    labels = c("OLS", "CQR", "UQR"),
+                    values = c("#F2494C", "#468C8A", "#FF9300"))  +
+  scale_x_continuous(limits = c(-1, 91),
+                     breaks = c(0, 10, 20, 30, 40, 50,
+                                60, 70, 80, 90),
+                     labels = c("OLS", "q10", "q20", "q30", "q40",
+                                "q50", "q60", "q70", "q80", "q90")) +
+  labs(x = "",
+       y = expression("Education's Association with SBP (" ~ Delta ~
+                  "mmHg)"),
+       color = "Model", group = "Model", fill = "Model") +
+  theme(legend.position = "bottom",
+        strip.background = element_blank(),
+        text = element_text(size = 10))
+
+```
+
+
+# <font size = "6.5" color = "F2494C">Contact information</font> {#contact-information}
+
+We'd love to hear feedback or answer any questions you still have!
+Please feel free to reach out to us through email at any time.
+
+Aayush Khadka
+<font size = "2.9">[aayush.khadka\@ucsf.edu](mailto:aayush.khadka@ucsf.edu){.email}</font>\
+Department of Family and Community Medicine, University of California,
+San Francisco
+
+Jilly Hebert
+<font size = "2.9">[jilly.hebert\@ucsf.edu](mailto:jilly.hebert@ucsf.edu){.email}</font>\
+Department of Family and Community Medicine, University of California,
+San Francisco
+
+Anusuha Vable
+<font size = "2.9">[anusha.vable\@ucsf.edu](mailto:anusha.vable@ucsf.edu){.email}</font>\
+Department of Family and Community Medicine, University of California,
+San Francisco
+
+# <font size = "6.5" color = "F2494C">References</font> {#references}
+
+All papers are available in the [repository](), apart from the *Handbook of Quantile Regression* which is available online. 
+
+
+1.  Bind, Marie-Abele C. et al. “Beyond the Mean: Quantile Regression to Explore     
+    the Association of Air Pollution with Gene-Specific Methylation in the 
+    Normative Aging Study.” Environmental health perspectives 123.8 (2015): 
+    759–765. Web.
+
+2.  Bind, M-Abele C. et al. “Quantile Causal Mediation Analysis Allowing 
+    Longitudinal Data.” Statistics in medicine 36.26 (2017): 4182–4195. Web.
+
+3.  Borah, Bijan J., and Anirban Basu. “HIGHLIGHTING DIFFERENCES BETWEEN    
+    CONDITIONAL AND UNCONDITIONAL QUANTILE REGRESSION APPROACHES THROUGH AN 
+    APPLICATION TO ASSESS MEDICATION ADHERENCE.” Health economics 22.9 (2013): 
+    1052–1070. Web.
+
+4.  Chernozhukov V, Fernández-Val I, Melly B. "Inference on
+    Counterfactual Distributions." Econometrica. 2013;81(6):2205--68.
+
+5.  Firpo S, Fortin NM, Lemieux T. "Unconditional Quantile Regressions."
+    Econometrica. 2009;77(3):953--73.
+
+6.  Firpo S, Pinto C. "Identification and Estimation of Distributional
+    Impacts of Interventions Using Changes in Inequality Measures." J
+    Appl Econom. 2016;31(3):457--86.
+    
+7.  He, Xuming, and Feifang Hu. “Markov Chain Marginal Bootstrap.” Journal of 
+    the American Statistical Association 97.459 (2002): 783–795. Web.
+   
+8.  Kocherginsky, Masha, and Xuming He. “Extensions of the Markov Chain Marginal
+    Bootstrap.” Statistics & probability letters 77.12 (2007): 1258–1268. Web.
+
+9.  Koenker R, Bassett G. "Regression Quantiles." Econometrica.
+    1978;46(1):33--50.
+
+10. Koenker R, Chernozhukov V, He X, Peng L, editors. "Handbook of
+    Quantile Regression [Internet]." 1st Edition. New York: Chapman &
+    Hall/CRC; 2017 [cited 2022 Sep 7]. 483 p. Available from:
+    <https://www.routledge.com/Handbook-of-Quantile-Regression/Koenker-Chernozhukov-He-Peng/p/book/9780367657574>
+
+11. Koenker R. "Quantile Regression: 40 Years On." Annu Rev Econ.
+    2017;9(1):155--76.
+    
+12. Rose G. "Sick individuals and sick populations." Int J Epidemiol. 2001
+    Jun;30(3):427-32; discussion 433-4. doi: 10.1093/ije/30.3.427. 
+    PMID:11416056.
